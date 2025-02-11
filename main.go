@@ -15,6 +15,7 @@ import (
 	_ "github.com/krateoplatformops/chart-inspector/docs"
 	"github.com/krateoplatformops/chart-inspector/internal/handlers"
 	getresources "github.com/krateoplatformops/chart-inspector/internal/handlers/resources/get"
+	"github.com/krateoplatformops/chart-inspector/internal/helmclient"
 	"github.com/krateoplatformops/snowplow/plumbing/env"
 	httpSwagger "github.com/swaggo/http-swagger"
 	"k8s.io/client-go/discovery"
@@ -22,6 +23,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/utils/ptr"
 )
 
 var (
@@ -93,6 +95,9 @@ func main() {
 		Client:          http.DefaultClient,
 		DiscoveryClient: cachedDisc,
 		DynamicClient:   dyn,
+		HelmClientOptions: ptr.To(helmclient.RestConfClientOptions{
+			RestConfig: cfg,
+		}),
 	}
 
 	healthy := int32(0)
