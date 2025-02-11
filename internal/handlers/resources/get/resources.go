@@ -36,19 +36,13 @@ var _ http.Handler = (*handler)(nil)
 // @Param compositionDefinitionUID query string true "Composition definition name"
 // @Param compositionDefinitionNamespace query string true "Composition definition namespace"
 // @Produce json
-// @Success 200 {object} map[string]any
+// @Success 200 {object} []Resource
 // @Router /resources [get]
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	compositionUID := r.URL.Query().Get("compositionUID")
 	compositionNamespace := r.URL.Query().Get("compositionNamespace")
 	compositionDefinitionUID := r.URL.Query().Get("compositionDefinitionUID")
 	compositionDefinitionNamespace := r.URL.Query().Get("compositionDefinitionNamespace")
-
-	// The following it need to be used in case of an error
-	// log.Error("unable to convert unstructured to typed rest action",
-	// 		slog.String("name", got.Unstructured.GetName()),
-	// 		slog.String("namespace", got.Unstructured.GetNamespace()),
-	// 		slog.Any("err", err))
 
 	if compositionUID == "" || compositionNamespace == "" || compositionDefinitionUID == "" || compositionDefinitionNamespace == "" {
 		h.Log.Error("missing required query parameters",
@@ -92,6 +86,10 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return tracer.WithRoundTripper(rt)
 	}
 
+	h.HelmClientOptions.Options = &helmclient.Options{
+		Namespace: composition.GetNamespace(),
+	}
+
 	helmcli, err := helmclient.NewClientFromRestConf(h.HelmClientOptions)
 	if err != nil {
 		h.Log.Error("unable to create helm client",
@@ -109,15 +107,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		)
 		response.InternalError(w, err)
 	}
-	passwd, err := k8scli.GetSecret(compositionDefinition.Spec.Chart.Credentials.PasswordRef)
-	if err != nil {
-		h.Log.Error("unable to get secret",
-			slog.String("compositionUID", compositionUID),
-			slog.String("compositionNamespace", compositionNamespace),
-			slog.Any("err", err),
-		)
-		response.InternalError(w, err)
-	}
+
 	chartSpec := helmclient.ChartSpec{
 		ReleaseName: meta.GetReleaseName(composition),
 		Namespace:   composition.GetNamespace(),
@@ -126,7 +116,17 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Repo:        compositionDefinition.Spec.Chart.Repo,
 		ValuesYaml:  string(bValues),
 	}
-	if compositionDefinition.Spec.Chart.Credentials != nil {
+	if compositionDefinition.Spec.Chart != nil && compositionDefinition.Spec.Chart.Credentials != nil {
+		passwd, err := k8scli.GetSecret(compositionDefinition.Spec.Chart.Credentials.PasswordRef)
+		if err != nil {
+			h.Log.Error("unable to get secret",
+				slog.String("compositionUID", compositionUID),
+				slog.String("compositionNamespace", compositionNamespace),
+				slog.Any("err", err),
+			)
+			response.InternalError(w, err)
+		}
+
 		chartSpec.Username = compositionDefinition.Spec.Chart.Credentials.Username
 		chartSpec.Password = passwd
 	}
@@ -134,10 +134,9 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_, err = helmcli.TemplateChartRaw(&chartSpec, nil)
 	if err != nil {
 		h.Log.Error("unable to template chart",
-			slog.String("compositionUID", compositionUID),
-			slog.String("compositionNamespace", compositionNamespace),
 			slog.Any("err", err),
 		)
+
 		response.InternalError(w, err)
 	}
 
@@ -146,10 +145,15 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// write the response in JSON format
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+	// w.WriteHeader(http.StatusOK)
 	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	enc.Encode(resources)
+	err = enc.Encode(resources)
+	if err != nil {
+		h.Log.Error("unable to marshal resources",
+			slog.Any("err", err),
+		)
+		response.InternalError(w, err)
+	}
 }
 
 func ExtractValuesFromSpec(un *unstructured.Unstructured) ([]byte, error) {

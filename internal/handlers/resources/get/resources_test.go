@@ -1,18 +1,22 @@
+//go:build integration
+// +build integration
+
 package resources
 
 import (
-	"log"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/krateoplatformops/chart-inspector/internal/handlers"
 	"github.com/krateoplatformops/chart-inspector/internal/helmclient"
-	coreprovv1 "github.com/krateoplatformops/core-provider/apis/compositiondefinitions/v1alpha1"
+	"gotest.tools/v3/assert"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/discovery"
 	memory "k8s.io/client-go/discovery/cached"
 	"k8s.io/client-go/dynamic"
@@ -27,6 +31,8 @@ import (
 
 	"sigs.k8s.io/e2e-framework/klient/decoder"
 	"sigs.k8s.io/e2e-framework/klient/k8s/resources"
+	"sigs.k8s.io/e2e-framework/klient/wait"
+	"sigs.k8s.io/e2e-framework/klient/wait/conditions"
 	"sigs.k8s.io/e2e-framework/pkg/env"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 	"sigs.k8s.io/e2e-framework/pkg/envfuncs"
@@ -91,14 +97,18 @@ func TestConvertHandler(t *testing.T) {
 		compositionDefinition string
 		composition           string
 		expectedStatus        int
+		expectedBody          string
 	}{
 		{
 			compositionDefinition: "fireworksapp.yaml",
 			composition:           "fireworksapp.yaml",
+			expectedStatus:        http.StatusInternalServerError,
 		},
 		{
 			compositionDefinition: "focus.yaml",
 			composition:           "focus.yaml",
+			expectedStatus:        http.StatusOK,
+			expectedBody:          `[{"group":"finops.krateo.io","version":"v1alpha1","resource":"datapresentationazures","name":"focus-1-focus-data-presentation-azure","namespace":"krateo-system"},{"group":"finops.krateo.io","version":"v1alpha1","resource":"datapresentationazures","name":"focus-1-focus-data-presentation-azure","namespace":"krateo-system"}]`,
 		},
 	}
 
@@ -119,31 +129,29 @@ func TestConvertHandler(t *testing.T) {
 				t.Fail()
 			}
 
-			// resli, err := decoder.DecodeAllFiles(ctx, os.DirFS(filepath.Join(testdataPath, "crds")), "*.yaml")
-			// if err != nil {
-			// 	t.Log("Error decoding CRDs: ", err)
-			// 	t.Fail()
-			// }
+			resli, err := decoder.DecodeAllFiles(ctx, os.DirFS(filepath.Join(testdataPath, "crds")), "*.yaml")
+			if err != nil {
+				t.Log("Error decoding CRDs: ", err)
+				t.Fail()
+			}
 
-			// ress := unstructured.UnstructuredList{}
-			// for _, res := range resli {
-			// 	if u, ok := res.(*unstructured.Unstructured); ok {
-			// 		ress.Items = append(ress.Items, *u)
-			// 	} else {
-			// 		t.Log("Error casting resource to unstructured.Unstructured", res.GetName())
-			// 		t.Fail()
-			// 	}
-			// }
-			// err = wait.For(
-			// 	conditions.New(r).ResourcesFound(&ress),
-			// 	wait.WithInterval(100*time.Millisecond),
-			// )
-			// if err != nil {
-			// 	t.Log("Error waiting for CRD: ", err)
-			// 	t.Fail()
-			// }
-
-			time.Sleep(5 * time.Second)
+			ress := unstructured.UnstructuredList{}
+			for _, res := range resli {
+				res, err := runtime.DefaultUnstructuredConverter.ToUnstructured(res)
+				if err != nil {
+					t.Log("Error converting CRD: ", err)
+					t.Fail()
+				}
+				ress.Items = append(ress.Items, unstructured.Unstructured{Object: res})
+			}
+			err = wait.For(
+				conditions.New(r).ResourcesFound(&ress),
+				wait.WithInterval(100*time.Millisecond),
+			)
+			if err != nil {
+				t.Log("Error waiting for CRD: ", err)
+				t.Fail()
+			}
 
 			apis.AddToScheme(r.GetScheme())
 
@@ -153,6 +161,15 @@ func TestConvertHandler(t *testing.T) {
 			)
 			if err != nil {
 				t.Log("Error decoding Compositions: ", err)
+				t.Fail()
+			}
+
+			err = decoder.DecodeEachFile(
+				ctx, os.DirFS(filepath.Join(testdataPath, "compositiondefinitions")), "*.yaml",
+				decoder.CreateIgnoreAlreadyExists(r),
+			)
+			if err != nil {
+				t.Log("Error decoding CompositionDefinitions: ", err)
 				t.Fail()
 			}
 
@@ -179,21 +196,32 @@ func TestConvertHandler(t *testing.T) {
 				t.Fail()
 			}
 
-			cd := &coreprovv1.CompositionDefinition{}
+			err = r.Get(ctx, composition.GetName(), composition.GetNamespace(), composition)
+			if err != nil {
+				t.Log("Error getting Composition: ", err)
+				t.Fail()
+			}
+
+			cd := &unstructured.Unstructured{}
 			err = decoder.DecodeFile(os.DirFS(filepath.Join(testdataPath, "compositiondefinitions")), tt.compositionDefinition, cd)
 			if err != nil {
 				t.Log("Error decoding CompositionDefinition: ", err)
 				t.Fail()
 			}
 
-			req := httptest.NewRequest(http.MethodGet, "/resources", nil)
-			req.URL.Query().Add("compositionUID", string(composition.GetUID()))
-			req.URL.Query().Add("compositionNamespace", composition.GetNamespace())
-			req.URL.Query().Add("compositionDefinitionUID", string(cd.GetUID()))
-			req.URL.Query().Add("compositionDefinitionNamespace", cd.GetNamespace())
+			err = r.Get(ctx, cd.GetName(), cd.GetNamespace(), cd)
+			if err != nil {
+				t.Log("Error getting CompositionDefinition: ", err)
+				t.Fail()
+			}
 
-			t.Log("Request: ", req.URL.Query())
-			t.Log("Loggin in", composition.GetUID(), composition.GetNamespace(), cd.GetUID(), cd.GetNamespace())
+			req := httptest.NewRequest(http.MethodGet, "/resources", nil)
+			values := req.URL.Query()
+			values.Add("compositionUID", string(composition.GetUID()))
+			values.Add("compositionNamespace", composition.GetNamespace())
+			values.Add("compositionDefinitionUID", string(cd.GetUID()))
+			values.Add("compositionDefinitionNamespace", cd.GetNamespace())
+			req.URL.RawQuery = values.Encode()
 
 			rec := httptest.NewRecorder()
 			h := GetResources(handlers.HandlerOptions{
@@ -203,9 +231,6 @@ func TestConvertHandler(t *testing.T) {
 				DynamicClient:   dynamic,
 				HelmClientOptions: ptr.To(helmclient.RestConfClientOptions{
 					RestConfig: c.Client().RESTConfig(),
-					Options: ptr.To(helmclient.Options{
-						Namespace: namespace,
-					}),
 				}),
 			})
 
@@ -214,18 +239,14 @@ func TestConvertHandler(t *testing.T) {
 			res := rec.Result()
 			defer res.Body.Close()
 
-			var body []byte
-			res.Body.Read(body)
+			if res.StatusCode != tt.expectedStatus {
+				t.Errorf("Expected status code %d, got %d", tt.expectedStatus, res.StatusCode)
+			}
 
-			log.Println("Response: ", string(body))
-
-			// assert.Equal(t, tt.expectedStatus, res.StatusCode)
-
-			// if len(tt.expectedBody) > 0 {
-			// 	respBody := strings.TrimSpace(rec.Body.String())
-			// 	assert.Equal(t, tt.expectedBody, respBody, "unexpected response body")
-			// }
-
+			if len(tt.expectedBody) > 0 {
+				respBody := strings.TrimSpace(rec.Body.String())
+				assert.Equal(t, tt.expectedBody, respBody, "unexpected response body")
+			}
 		}
 
 		return ctx

@@ -3,6 +3,8 @@ kind: FireworksApp
 metadata:
   annotations:
      "krateo.io/connector-verbose": "true"
+  labels:
+    krateo.io/release-name: fireworks-app-8
   name: fireworksapp-8
   namespace: demo-system
 spec:

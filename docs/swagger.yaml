@@ -1,19 +1,58 @@
 basePath: /
-externalDocs:
-  description: OpenAPI
-  url: https://swagger.io/resources/open-api/
-host: localhost:8080
+definitions:
+  resources.Resource:
+    properties:
+      group:
+        type: string
+      name:
+        type: string
+      namespace:
+        type: string
+      resource:
+        type: string
+      version:
+        type: string
+    type: object
 info:
-  contact:
-    email: contact@krateoplatformops.io
-    name: Krateo Support
-    url: https://krateo.io
-  license:
-    name: Apache 2.0
-    url: http://www.apache.org/licenses/LICENSE-2.0.html
-  termsOfService: http://swagger.io/terms/
+  contact: {}
+  description: This is the API for the Chart Inspector service. It provides endpoints
+    for inspecting Helm charts.
+  title: Chart Inspector API
   version: "1.0"
-paths: {}
-schemes:
-- http
+paths:
+  /resources:
+    get:
+      description: Get Helm chart resources
+      operationId: get-chart-resources
+      parameters:
+      - description: Composition name
+        in: query
+        name: compositionUID
+        required: true
+        type: string
+      - description: Composition namespace
+        in: query
+        name: compositionNamespace
+        required: true
+        type: string
+      - description: Composition definition name
+        in: query
+        name: compositionDefinitionUID
+        required: true
+        type: string
+      - description: Composition definition namespace
+        in: query
+        name: compositionDefinitionNamespace
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/resources.Resource'
+            type: array
+      summary: Get Helm chart resources
 swagger: "2.0"

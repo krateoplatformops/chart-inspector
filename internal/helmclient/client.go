@@ -87,8 +87,6 @@ func newClient(options *Options, clientGetter genericclioptions.RESTClientGetter
 		return nil, err
 	}
 
-	fmt.Println("namespace: ", settings.Namespace())
-
 	debugLog := options.DebugLog
 	if debugLog == nil {
 		debugLog = func(format string, v ...interface{}) {
@@ -149,7 +147,6 @@ func setEnvSettings(ppOptions **Options, settings *cli.EnvSettings) error {
 	// set the namespace with this ugly workaround because cli.EnvSettings.namespace is private
 	// thank you helm!
 	if options.Namespace != "" {
-		fmt.Println("namespaces: ", options.Namespace)
 		pflags := pflag.NewFlagSet("", pflag.ContinueOnError)
 		settings.AddFlags(pflags)
 		err := pflags.Parse([]string{"-n", options.Namespace})

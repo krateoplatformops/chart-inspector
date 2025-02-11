@@ -15,37 +15,26 @@ import (
 	_ "github.com/krateoplatformops/chart-inspector/docs"
 	"github.com/krateoplatformops/chart-inspector/internal/handlers"
 	getresources "github.com/krateoplatformops/chart-inspector/internal/handlers/resources/get"
+	"github.com/krateoplatformops/chart-inspector/internal/helmclient"
 	"github.com/krateoplatformops/snowplow/plumbing/env"
+	"github.com/krateoplatformops/snowplow/plumbing/prettylog"
 	httpSwagger "github.com/swaggo/http-swagger"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/utils/ptr"
 )
 
 var (
 	serviceName = "chart-inspector"
 )
 
-// @title
+// @title 		 Chart Inspector API
 // @version         1.0
-// @description
-// @termsOfService  http://swagger.io/terms/
-
-// @contact.name   Krateo Support
-// @contact.url    https://krateo.io
-// @contact.email  contact@krateoplatformops.io
-
-// @license.name  Apache 2.0
-// @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
-
-// @host			localhost:8080
+// @description   This is the API for the Chart Inspector service. It provides endpoints for inspecting Helm charts.
 // @BasePath		/
-// @schemes 	 	http
-
-// @externalDocs.description  OpenAPI
-// @externalDocs.url          https://swagger.io/resources/open-api/
 func main() {
 	debugOn := flag.Bool("debug", env.Bool("PLUGIN_DEBUG", true), "dump verbose output")
 	port := flag.Int("port", env.Int("PLUGIN_PORT", 8081), "port to listen on")
@@ -56,12 +45,20 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	lopts := &slog.HandlerOptions{Level: slog.LevelInfo}
+	logLevel := slog.LevelInfo
 	if *debugOn {
-		lopts = &slog.HandlerOptions{Level: slog.LevelDebug}
+		logLevel = slog.LevelDebug
 	}
 
-	log := slog.New(slog.NewTextHandler(os.Stdout, lopts))
+	lh := prettylog.New(&slog.HandlerOptions{
+		Level:     logLevel,
+		AddSource: false,
+	},
+		prettylog.WithDestinationWriter(os.Stderr),
+		prettylog.WithColor(),
+		prettylog.WithOutputEmptyAttrs(),
+	)
+	log := slog.New(lh)
 
 	log = log.With("service", serviceName)
 
@@ -93,6 +90,9 @@ func main() {
 		Client:          http.DefaultClient,
 		DiscoveryClient: cachedDisc,
 		DynamicClient:   dyn,
+		HelmClientOptions: ptr.To(helmclient.RestConfClientOptions{
+			RestConfig: cfg,
+		}),
 	}
 
 	healthy := int32(0)
