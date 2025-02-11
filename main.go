@@ -30,24 +30,10 @@ var (
 	serviceName = "chart-inspector"
 )
 
-// @title
+// @title 		 Chart Inspector API
 // @version         1.0
-// @description
-// @termsOfService  http://swagger.io/terms/
-
-// @contact.name   Krateo Support
-// @contact.url    https://krateo.io
-// @contact.email  contact@krateoplatformops.io
-
-// @license.name  Apache 2.0
-// @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
-
-// @host			localhost:8080
+// @description   This is the API for the Chart Inspector service. It provides endpoints for inspecting Helm charts.
 // @BasePath		/
-// @schemes 	 	http
-
-// @externalDocs.description  OpenAPI
-// @externalDocs.url          https://swagger.io/resources/open-api/
 func main() {
 	debugOn := flag.Bool("debug", env.Bool("PLUGIN_DEBUG", true), "dump verbose output")
 	port := flag.Int("port", env.Int("PLUGIN_PORT", 8081), "port to listen on")

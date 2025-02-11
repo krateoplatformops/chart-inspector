@@ -36,19 +36,13 @@ var _ http.Handler = (*handler)(nil)
 // @Param compositionDefinitionUID query string true "Composition definition name"
 // @Param compositionDefinitionNamespace query string true "Composition definition namespace"
 // @Produce json
-// @Success 200 {object} map[string]any
+// @Success 200 {object} []Resource
 // @Router /resources [get]
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	compositionUID := r.URL.Query().Get("compositionUID")
 	compositionNamespace := r.URL.Query().Get("compositionNamespace")
 	compositionDefinitionUID := r.URL.Query().Get("compositionDefinitionUID")
 	compositionDefinitionNamespace := r.URL.Query().Get("compositionDefinitionNamespace")
-
-	// The following it need to be used in case of an error
-	// log.Error("unable to convert unstructured to typed rest action",
-	// 		slog.String("name", got.Unstructured.GetName()),
-	// 		slog.String("namespace", got.Unstructured.GetNamespace()),
-	// 		slog.Any("err", err))
 
 	if compositionUID == "" || compositionNamespace == "" || compositionDefinitionUID == "" || compositionDefinitionNamespace == "" {
 		h.Log.Error("missing required query parameters",

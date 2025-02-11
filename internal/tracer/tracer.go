@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"strings"
+
+	"github.com/krateoplatformops/chart-inspector/internal/handlers/resources"
 )
 
 // Tracer implements http.RoundTripper.  It prints each request and
@@ -11,24 +13,16 @@ import (
 // including bearer tokens.
 type Tracer struct {
 	http.RoundTripper
-	resources []Resource
+	resources []resources.Resource
 }
 
-func (t *Tracer) GetResources() []Resource {
+func (t *Tracer) GetResources() []resources.Resource {
 	return t.resources
 }
 
 func (t *Tracer) WithRoundTripper(rt http.RoundTripper) *Tracer {
 	t.RoundTripper = rt
 	return t
-}
-
-type Resource struct {
-	Group     string `json:"group"`
-	Version   string `json:"version"`
-	Resource  string `json:"resource"`
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
 }
 
 // RoundTrip calls the nested RoundTripper while printing each request and
@@ -46,7 +40,7 @@ func (t *Tracer) RoundTrip(req *http.Request) (*http.Response, error) {
 	split := strings.Split(req.URL.Path, "/")
 	if len(split) > 2 {
 		if len(split) > 6 && split[1] == "apis" && split[3] == "namespaces" {
-			t.resources = append(t.resources, Resource{
+			t.resources = append(t.resources, resources.Resource{
 				Group:     "",
 				Version:   split[2],
 				Resource:  split[5],
@@ -54,7 +48,7 @@ func (t *Tracer) RoundTrip(req *http.Request) (*http.Response, error) {
 				Name:      split[6],
 			})
 		} else if len(split) > 7 && split[1] == "apis" && split[4] == "namespaces" {
-			t.resources = append(t.resources, Resource{
+			t.resources = append(t.resources, resources.Resource{
 				Group:     split[2],
 				Version:   split[3],
 				Resource:  split[6],
@@ -62,7 +56,7 @@ func (t *Tracer) RoundTrip(req *http.Request) (*http.Response, error) {
 				Name:      split[7],
 			})
 		} else if len(split) > 6 && split[1] == "api" && split[3] == "namespaces" {
-			t.resources = append(t.resources, Resource{
+			t.resources = append(t.resources, resources.Resource{
 				Group:     "",
 				Version:   split[2],
 				Resource:  split[5],
@@ -70,7 +64,7 @@ func (t *Tracer) RoundTrip(req *http.Request) (*http.Response, error) {
 				Name:      split[6],
 			})
 		} else if len(split) > 7 && split[1] == "api" && split[4] == "namespaces" {
-			t.resources = append(t.resources, Resource{
+			t.resources = append(t.resources, resources.Resource{
 				Group:     split[2],
 				Version:   split[3],
 				Resource:  split[6],
