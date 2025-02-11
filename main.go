@@ -17,6 +17,7 @@ import (
 	getresources "github.com/krateoplatformops/chart-inspector/internal/handlers/resources/get"
 	"github.com/krateoplatformops/chart-inspector/internal/helmclient"
 	"github.com/krateoplatformops/snowplow/plumbing/env"
+	"github.com/krateoplatformops/snowplow/plumbing/prettylog"
 	httpSwagger "github.com/swaggo/http-swagger"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/discovery/cached/memory"
@@ -44,12 +45,20 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	lopts := &slog.HandlerOptions{Level: slog.LevelInfo}
+	logLevel := slog.LevelInfo
 	if *debugOn {
-		lopts = &slog.HandlerOptions{Level: slog.LevelDebug}
+		logLevel = slog.LevelDebug
 	}
 
-	log := slog.New(slog.NewTextHandler(os.Stdout, lopts))
+	lh := prettylog.New(&slog.HandlerOptions{
+		Level:     logLevel,
+		AddSource: false,
+	},
+		prettylog.WithDestinationWriter(os.Stderr),
+		prettylog.WithColor(),
+		prettylog.WithOutputEmptyAttrs(),
+	)
+	log := slog.New(lh)
 
 	log = log.With("service", serviceName)
 
