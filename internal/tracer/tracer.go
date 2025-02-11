@@ -3,10 +3,7 @@ package tracer
 import (
 	"net/http"
 	"net/http/httputil"
-	"os"
 	"strings"
-
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // Tracer implements http.RoundTripper.  It prints each request and
@@ -27,9 +24,11 @@ func (t *Tracer) WithRoundTripper(rt http.RoundTripper) *Tracer {
 }
 
 type Resource struct {
-	schema.GroupVersionResource
-	Name      string
-	Namespace string
+	Group     string `json:"group"`
+	Version   string `json:"version"`
+	Resource  string `json:"resource"`
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
 }
 
 // RoundTrip calls the nested RoundTripper while printing each request and
@@ -37,52 +36,44 @@ type Resource struct {
 // may output sensitive information including bearer tokens.
 func (t *Tracer) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Dump the request to t.OutFile.
-	b, err := httputil.DumpRequestOut(req, true)
+	_, err := httputil.DumpRequestOut(req, true)
 	if err != nil {
 		return nil, err
 	}
-	os.Stderr.Write(b)
-	os.Stderr.Write([]byte{'\n'})
+	// os.Stderr.Write(b)
+	// os.Stderr.Write([]byte{'\n'})
 
 	split := strings.Split(req.URL.Path, "/")
 	if len(split) > 2 {
 		if len(split) > 6 && split[1] == "apis" && split[3] == "namespaces" {
 			t.resources = append(t.resources, Resource{
-				GroupVersionResource: schema.GroupVersionResource{
-					Group:    "",
-					Version:  split[2],
-					Resource: split[5],
-				},
+				Group:     "",
+				Version:   split[2],
+				Resource:  split[5],
 				Namespace: split[4],
 				Name:      split[6],
 			})
 		} else if len(split) > 7 && split[1] == "apis" && split[4] == "namespaces" {
 			t.resources = append(t.resources, Resource{
-				GroupVersionResource: schema.GroupVersionResource{
-					Group:    split[2],
-					Version:  split[3],
-					Resource: split[6],
-				},
+				Group:     split[2],
+				Version:   split[3],
+				Resource:  split[6],
 				Namespace: split[5],
 				Name:      split[7],
 			})
 		} else if len(split) > 6 && split[1] == "api" && split[3] == "namespaces" {
 			t.resources = append(t.resources, Resource{
-				GroupVersionResource: schema.GroupVersionResource{
-					Group:    "",
-					Version:  split[2],
-					Resource: split[5],
-				},
+				Group:     "",
+				Version:   split[2],
+				Resource:  split[5],
 				Namespace: split[4],
 				Name:      split[6],
 			})
 		} else if len(split) > 7 && split[1] == "api" && split[4] == "namespaces" {
 			t.resources = append(t.resources, Resource{
-				GroupVersionResource: schema.GroupVersionResource{
-					Group:    split[2],
-					Version:  split[3],
-					Resource: split[6],
-				},
+				Group:     split[2],
+				Version:   split[3],
+				Resource:  split[6],
 				Namespace: split[5],
 				Name:      split[7],
 			})
@@ -98,7 +89,7 @@ func (t *Tracer) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	//Dump the response to t.OutFile.
-	b, err = httputil.DumpResponse(resp, req.URL.Query().Get("watch") != "true")
+	_, err = httputil.DumpResponse(resp, req.URL.Query().Get("watch") != "true")
 	if err != nil {
 		return nil, err
 	}
