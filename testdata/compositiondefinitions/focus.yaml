@@ -7,6 +7,6 @@ metadata:
   namespace: krateo-system
 spec:
   chart:
-    repo: focus-data-presentation-azure
-    url: https://charts.krateo.io
-    version: "0.1.0"
+    repo: focus-template
+    url: https://matteogastaldello.github.io/private-charts/
+    version: "0.3.1"

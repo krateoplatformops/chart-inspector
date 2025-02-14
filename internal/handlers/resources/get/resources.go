@@ -52,6 +52,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			slog.String("compositionDefinitionNamespace", compositionDefinitionNamespace),
 		)
 		response.BadRequest(w, fmt.Errorf("missing required query parameters"))
+		return
 	}
 
 	// Getting the resources
@@ -68,6 +69,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			slog.Any("err", err),
 		)
 		response.InternalError(w, err)
+		return
 	}
 
 	compositionDefinition, err := k8scli.GetCompositionDefinition(compositionDefinitionUID, compositionDefinitionNamespace)
@@ -78,6 +80,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			slog.Any("err", err),
 		)
 		response.InternalError(w, err)
+		return
 	}
 
 	tracer := &tracer.Tracer{}
@@ -96,6 +99,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			slog.Any("err", err),
 		)
 		response.InternalError(w, err)
+		return
 	}
 
 	bValues, err := ExtractValuesFromSpec(composition)
@@ -106,6 +110,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			slog.Any("err", err),
 		)
 		response.InternalError(w, err)
+		return
 	}
 
 	chartSpec := helmclient.ChartSpec{
@@ -125,6 +130,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				slog.Any("err", err),
 			)
 			response.InternalError(w, err)
+			return
 		}
 
 		chartSpec.Username = compositionDefinition.Spec.Chart.Credentials.Username
@@ -138,6 +144,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		)
 
 		response.InternalError(w, err)
+		return
 	}
 
 	// Getting the resources
@@ -153,6 +160,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			slog.Any("err", err),
 		)
 		response.InternalError(w, err)
+		return
 	}
 }
 
