@@ -38,8 +38,9 @@ func (t *Tracer) RoundTrip(req *http.Request) (*http.Response, error) {
 	// os.Stderr.Write([]byte{'\n'})
 
 	split := strings.Split(req.URL.Path, "/")
+
 	if len(split) > 2 {
-		if len(split) > 7 && (split[1] == "apis" || split[1] == "api") && split[4] == "namespaces" {
+		if len(split) == 8 && (split[1] == "apis" || split[1] == "api") && split[4] == "namespaces" {
 			t.resources = append(t.resources, resources.Resource{
 				Group:     split[2],
 				Version:   split[3],
@@ -47,7 +48,7 @@ func (t *Tracer) RoundTrip(req *http.Request) (*http.Response, error) {
 				Namespace: split[5],
 				Name:      split[7],
 			})
-		} else if len(split) > 6 && (split[1] == "apis" || split[1] == "api") && split[3] == "namespaces" {
+		} else if len(split) == 7 && (split[1] == "apis" || split[1] == "api") && split[3] == "namespaces" {
 			t.resources = append(t.resources, resources.Resource{
 				Group:     "",
 				Version:   split[2],
@@ -55,21 +56,21 @@ func (t *Tracer) RoundTrip(req *http.Request) (*http.Response, error) {
 				Namespace: split[4],
 				Name:      split[6],
 			})
-		} else if len(split) > 6 && (split[1] == "apis" || split[1] == "api") {
+		} else if len(split) == 6 && (split[1] == "apis" || split[1] == "api") {
 			t.resources = append(t.resources, resources.Resource{
 				Group:     split[2],
 				Version:   split[3],
-				Resource:  split[5],
-				Namespace: "",
-				Name:      split[6],
-			})
-		} else if len(split) > 5 && (split[1] == "apis" || split[1] == "api") {
-			t.resources = append(t.resources, resources.Resource{
-				Group:     "",
-				Version:   split[2],
 				Resource:  split[4],
 				Namespace: "",
 				Name:      split[5],
+			})
+		} else if len(split) == 5 && (split[1] == "apis" || split[1] == "api") {
+			t.resources = append(t.resources, resources.Resource{
+				Group:     "",
+				Version:   split[2],
+				Resource:  split[3],
+				Namespace: "",
+				Name:      split[4],
 			})
 		}
 	}
