@@ -60,8 +60,8 @@ func (c *Client) GetComposition(uid string, namespace string) (*unstructured.Uns
 	}
 
 	return nil, errors.NewNotFound(schema.GroupResource{
-		Group:    CompositionDefinitionGroup,
-		Resource: CompositionDefinitionResource,
+		Group:    "composition.krateo.io",
+		Resource: "compositions",
 	}, uid)
 }
 
