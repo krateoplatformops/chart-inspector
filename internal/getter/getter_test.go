@@ -130,7 +130,7 @@ func TestGetComposition(t *testing.T) {
 			apis.AddToScheme(r.GetScheme())
 
 			err = decoder.DecodeEachFile(
-				ctx, os.DirFS(filepath.Join(testdataPath, "compositions")), "*.yaml",
+				ctx, os.DirFS(filepath.Join(testdataPath, "compositions")), "fireworksapp.yaml",
 				decoder.CreateIgnoreAlreadyExists(r),
 			)
 			if err != nil {
@@ -149,7 +149,7 @@ func TestGetComposition(t *testing.T) {
 
 		apis.AddToScheme(r.GetScheme())
 
-		objs, err := decoder.DecodeAllFiles(ctx, os.DirFS(filepath.Join(testdataPath, "compositions")), "*.yaml")
+		objs, err := decoder.DecodeAllFiles(ctx, os.DirFS(filepath.Join(testdataPath, "compositions")), "fireworksapp.yaml")
 		if err != nil {
 			t.Log("Error decoding compositions: ", err)
 			t.Fail()
@@ -159,6 +159,79 @@ func TestGetComposition(t *testing.T) {
 		discovery := discovery.NewDiscoveryClientForConfigOrDie(c.Client().RESTConfig())
 		cachedDisc := memory.NewMemCacheClient(discovery)
 		cli := NewClient(dynamic, cachedDisc)
+
+		for _, obj := range objs {
+			comp := k8s.Object(obj)
+			err = r.Get(ctx, comp.GetName(), comp.GetNamespace(), comp)
+			if err != nil {
+				t.Log("Error getting composition: ", err)
+				t.Fail()
+			}
+			t.Log("Composition ID", comp.GetUID())
+
+			res, err := cli.GetComposition(string(comp.GetUID()), comp.GetNamespace())
+			if err != nil {
+				t.Log("Error getting composition by ID: ", err)
+				t.Fail()
+			}
+
+			if res.GetUID() != comp.GetUID() {
+				t.Log("Composition ID mismatch")
+				t.Fail()
+			}
+		}
+
+		// test next
+
+		err = decoder.DecodeEachFile(
+			ctx, os.DirFS(filepath.Join(testdataPath, "crds", "next")), "*.yaml",
+			decoder.CreateIgnoreAlreadyExists(r),
+		)
+		if err != nil {
+			t.Log("Error decoding CRDs: ", err)
+			t.Fail()
+		}
+
+		resli, err := decoder.DecodeAllFiles(ctx, os.DirFS(filepath.Join(testdataPath, "crds", "next")), "*.yaml")
+		if err != nil {
+			t.Log("Error decoding CRDs: ", err)
+			t.Fail()
+		}
+
+		ress := unstructured.UnstructuredList{}
+		for _, res := range resli {
+			if u, ok := res.(*unstructured.Unstructured); ok {
+				ress.Items = append(ress.Items, *u)
+			} else {
+				t.Log("Error casting resource to unstructured.Unstructured")
+				t.Fail()
+			}
+		}
+		err = wait.For(
+			conditions.New(r).ResourcesFound(&ress),
+			wait.WithInterval(100*time.Millisecond),
+		)
+		if err != nil {
+			t.Log("Error waiting for CRD: ", err)
+			t.Fail()
+		}
+
+		apis.AddToScheme(r.GetScheme())
+
+		err = decoder.DecodeEachFile(
+			ctx, os.DirFS(filepath.Join(testdataPath, "compositions")), "focus.yaml",
+			decoder.CreateIgnoreAlreadyExists(r),
+		)
+		if err != nil {
+			t.Log("Error decoding Compositions: ", err)
+			t.Fail()
+		}
+
+		objs, err = decoder.DecodeAllFiles(ctx, os.DirFS(filepath.Join(testdataPath, "compositions")), "focus.yaml")
+		if err != nil {
+			t.Log("Error decoding compositions: ", err)
+			t.Fail()
+		}
 
 		for _, obj := range objs {
 			comp := k8s.Object(obj)

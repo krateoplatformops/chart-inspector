@@ -15,11 +15,14 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-func (c *Client) GetComposition(uid string, namespace string) (*unstructured.Unstructured, error) {
-
+func (c *Client) searchComposition(uid string, namespace string) (*unstructured.Unstructured, error) {
 	_, apiResourceList, err := c.discovery.ServerGroupsAndResources()
 	if err != nil {
 		return nil, fmt.Errorf("failed to discover API resources: %v", err)
+	}
+
+	if apiResourceList == nil {
+		return nil, fmt.Errorf("no API resources found")
 	}
 
 	for _, apiResource := range apiResourceList {
@@ -29,9 +32,6 @@ func (c *Client) GetComposition(uid string, namespace string) (*unstructured.Uns
 		}
 
 		if group.Group == "composition.krateo.io" {
-			// b, _ := json.MarshalIndent(apiResource, "", "  ")
-			// fmt.Println("group", string(b))
-
 			var resource string
 			for _, r := range apiResource.APIResources {
 				if !strings.Contains(r.Name, "/status") {
@@ -63,6 +63,17 @@ func (c *Client) GetComposition(uid string, namespace string) (*unstructured.Uns
 		Group:    "composition.krateo.io",
 		Resource: "compositions",
 	}, uid)
+}
+
+func (c *Client) GetComposition(uid string, namespace string) (*unstructured.Unstructured, error) {
+	comp, err := c.searchComposition(uid, namespace)
+	if errors.IsNotFound(err) {
+		c.discovery.Invalidate()
+		comp, err = c.searchComposition(uid, namespace)
+		return comp, err
+	}
+
+	return comp, err
 }
 
 const (
