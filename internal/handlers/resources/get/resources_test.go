@@ -129,6 +129,15 @@ func TestConvertHandler(t *testing.T) {
 				t.Fail()
 			}
 
+			err = decoder.DecodeEachFile(
+				ctx, os.DirFS(filepath.Join(testdataPath, "crds", "next")), "*.yaml",
+				decoder.CreateIgnoreAlreadyExists(r),
+			)
+			if err != nil {
+				t.Log("Error decoding CRDs: ", err)
+				t.Fail()
+			}
+
 			resli, err := decoder.DecodeAllFiles(ctx, os.DirFS(filepath.Join(testdataPath, "crds")), "*.yaml")
 			if err != nil {
 				t.Log("Error decoding CRDs: ", err)
