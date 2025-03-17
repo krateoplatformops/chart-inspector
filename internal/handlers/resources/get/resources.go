@@ -114,12 +114,13 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	chartSpec := helmclient.ChartSpec{
-		ReleaseName: meta.GetReleaseName(composition),
-		Namespace:   composition.GetNamespace(),
-		ChartName:   compositionDefinition.Spec.Chart.Url,
-		Version:     compositionDefinition.Spec.Chart.Version,
-		Repo:        compositionDefinition.Spec.Chart.Repo,
-		ValuesYaml:  string(bValues),
+		InsecureSkipTLSverify: compositionDefinition.Spec.Chart.InsecureSkipVerifyTLS,
+		ReleaseName:           meta.GetReleaseName(composition),
+		Namespace:             composition.GetNamespace(),
+		ChartName:             compositionDefinition.Spec.Chart.Url,
+		Version:               compositionDefinition.Spec.Chart.Version,
+		Repo:                  compositionDefinition.Spec.Chart.Repo,
+		ValuesYaml:            string(bValues),
 	}
 	if compositionDefinition.Spec.Chart != nil && compositionDefinition.Spec.Chart.Credentials != nil {
 		passwd, err := k8scli.GetSecret(compositionDefinition.Spec.Chart.Credentials.PasswordRef)
