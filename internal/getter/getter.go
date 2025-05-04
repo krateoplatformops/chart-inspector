@@ -32,28 +32,25 @@ func (c *Client) searchComposition(uid string, namespace string) (*unstructured.
 		}
 
 		if group.Group == "composition.krateo.io" {
-			var resource string
 			for _, r := range apiResource.APIResources {
 				if !strings.Contains(r.Name, "/status") {
-					resource = r.Name
-					break
-				}
-			}
+					gvr := schema.GroupVersionResource{
+						Group:    group.Group,
+						Version:  group.Version,
+						Resource: r.Name,
+					}
+					li, err := c.dynamic.Resource(gvr).Namespace(namespace).List(context.Background(), v1.ListOptions{})
+					if err != nil {
+						return nil, fmt.Errorf("failed to list composition: %v", err)
+					}
 
-			gvr := schema.GroupVersionResource{
-				Group:    group.Group,
-				Version:  group.Version,
-				Resource: resource,
-			}
-			li, err := c.dynamic.Resource(gvr).Namespace(namespace).List(context.Background(), v1.ListOptions{})
-			if err != nil {
-				return nil, fmt.Errorf("failed to list composition: %v", err)
-			}
-
-			for _, item := range li.Items {
-				if string(item.GetUID()) == uid {
-					return &item, nil
+					for _, item := range li.Items {
+						if string(item.GetUID()) == uid {
+							return &item, nil
+						}
+					}
 				}
+
 			}
 
 		}
