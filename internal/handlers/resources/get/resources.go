@@ -61,6 +61,13 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.DiscoveryClient,
 	)
 
+	h.Log.Info("Handling request to get resources",
+		slog.String("compositionUID", compositionUID),
+		slog.String("compositionNamespace", compositionNamespace),
+		slog.String("compositionDefinitionUID", compositionDefinitionUID),
+		slog.String("compositionDefinitionNamespace", compositionDefinitionNamespace),
+	)
+
 	composition, err := k8scli.GetComposition(compositionUID, compositionNamespace)
 	if err != nil {
 		h.Log.Error("unable to get composition",
@@ -163,6 +170,13 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		response.InternalError(w, err)
 		return
 	}
+
+	h.Log.Info("Successfully handled request to get resources",
+		slog.String("compositionUID", compositionUID),
+		slog.String("compositionNamespace", compositionNamespace),
+		slog.String("compositionDefinitionUID", compositionDefinitionUID),
+		slog.String("compositionDefinitionNamespace", compositionDefinitionNamespace),
+	)
 }
 
 func ExtractValuesFromSpec(un *unstructured.Unstructured) ([]byte, error) {

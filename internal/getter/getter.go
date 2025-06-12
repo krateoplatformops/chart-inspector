@@ -35,13 +35,13 @@ func (c *Client) searchComposition(uid string, namespace string) (*unstructured.
 			for _, r := range apiResource.APIResources {
 				if !strings.Contains(r.Name, "/status") {
 					gvr := schema.GroupVersionResource{
-						Group:    group.Group,
-						Version:  group.Version,
+						Group:    r.Group,
+						Version:  r.Version,
 						Resource: r.Name,
 					}
 					li, err := c.dynamic.Resource(gvr).Namespace(namespace).List(context.Background(), v1.ListOptions{})
 					if err != nil {
-						return nil, fmt.Errorf("failed to list composition: %v", err)
+						return nil, fmt.Errorf("failed to list composition for gvr %s: %v", gvr.String(), err)
 					}
 
 					for _, item := range li.Items {
@@ -50,7 +50,6 @@ func (c *Client) searchComposition(uid string, namespace string) (*unstructured.
 						}
 					}
 				}
-
 			}
 
 		}
