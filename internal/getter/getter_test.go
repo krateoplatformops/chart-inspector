@@ -10,15 +10,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/krateoplatformops/plumbing/e2e"
+	xenv "github.com/krateoplatformops/plumbing/env"
 	rtv1 "github.com/krateoplatformops/provider-runtime/apis/common/v1"
-	"github.com/krateoplatformops/snowplow/apis"
-	"github.com/krateoplatformops/snowplow/plumbing/e2e"
-	xenv "github.com/krateoplatformops/snowplow/plumbing/env"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/client-go/discovery"
-	"k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/dynamic"
 
 	"sigs.k8s.io/e2e-framework/klient/decoder"
@@ -83,196 +81,6 @@ func TestMain(m *testing.M) {
 	os.Exit(testenv.Run(m))
 }
 
-func TestGetComposition(t *testing.T) {
-	os.Setenv("DEBUG", "1")
-
-	f := features.New("Setup").
-		Setup(e2e.Logger("test")).
-		Setup(func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
-			r, err := resources.New(cfg.Client().RESTConfig())
-			if err != nil {
-				t.Fail()
-			}
-
-			err = decoder.DecodeEachFile(
-				ctx, os.DirFS(filepath.Join(testdataPath, "crds")), "*.yaml",
-				decoder.CreateIgnoreAlreadyExists(r),
-			)
-			if err != nil {
-				t.Log("Error decoding CRDs: ", err)
-				t.Fail()
-			}
-
-			resli, err := decoder.DecodeAllFiles(ctx, os.DirFS(filepath.Join(testdataPath, "crds")), "*.yaml")
-			if err != nil {
-				t.Log("Error decoding CRDs: ", err)
-				t.Fail()
-			}
-
-			ress := unstructured.UnstructuredList{}
-			for _, res := range resli {
-				if u, ok := res.(*unstructured.Unstructured); ok {
-					ress.Items = append(ress.Items, *u)
-				} else {
-					t.Log("Error casting resource to unstructured.Unstructured")
-					t.Fail()
-				}
-			}
-			err = wait.For(
-				conditions.New(r).ResourcesFound(&ress),
-				wait.WithInterval(100*time.Millisecond),
-			)
-			if err != nil {
-				t.Log("Error waiting for CRD: ", err)
-				t.Fail()
-			}
-
-			apis.AddToScheme(r.GetScheme())
-
-			err = decoder.DecodeEachFile(
-				ctx, os.DirFS(filepath.Join(testdataPath, "compositions")), "fireworksapp.yaml",
-				decoder.CreateIgnoreAlreadyExists(r),
-			)
-			if err != nil {
-				t.Log("Error decoding Compositions: ", err)
-				t.Fail()
-			}
-
-			r.WithNamespace(namespace)
-			return ctx
-		}).Assess("Testing Compositions", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
-		r, err := resources.New(c.Client().RESTConfig())
-		if err != nil {
-			t.Fail()
-		}
-		r.WithNamespace(namespace)
-
-		apis.AddToScheme(r.GetScheme())
-
-		objs, err := decoder.DecodeAllFiles(ctx, os.DirFS(filepath.Join(testdataPath, "compositions")), "fireworksapp.yaml")
-		if err != nil {
-			t.Log("Error decoding compositions: ", err)
-			t.Fail()
-		}
-
-		dynamic := dynamic.NewForConfigOrDie(c.Client().RESTConfig())
-		discovery := discovery.NewDiscoveryClientForConfigOrDie(c.Client().RESTConfig())
-		cachedDisc := memory.NewMemCacheClient(discovery)
-		cli := NewClient(dynamic, cachedDisc)
-
-		for _, obj := range objs {
-			comp := k8s.Object(obj)
-			err = r.Get(ctx, comp.GetName(), comp.GetNamespace(), comp)
-			if err != nil {
-				t.Log("Error getting composition: ", err)
-				t.Fail()
-			}
-			t.Log("Composition ID", comp.GetUID())
-
-			res, err := cli.GetComposition(string(comp.GetUID()), comp.GetNamespace())
-			if err != nil {
-				t.Log("Error getting composition by ID: ", err)
-				t.Fail()
-			}
-
-			if res.GetUID() != comp.GetUID() {
-				t.Log("Composition ID mismatch")
-				t.Fail()
-			}
-		}
-
-		// test next
-
-		err = decoder.DecodeEachFile(
-			ctx, os.DirFS(filepath.Join(testdataPath, "crds", "next")), "*.yaml",
-			decoder.CreateIgnoreAlreadyExists(r),
-		)
-		if err != nil {
-			t.Log("Error decoding CRDs: ", err)
-			t.Fail()
-		}
-
-		resli, err := decoder.DecodeAllFiles(ctx, os.DirFS(filepath.Join(testdataPath, "crds", "next")), "*.yaml")
-		if err != nil {
-			t.Log("Error decoding CRDs: ", err)
-			t.Fail()
-		}
-
-		ress := unstructured.UnstructuredList{}
-		for _, res := range resli {
-			if u, ok := res.(*unstructured.Unstructured); ok {
-				ress.Items = append(ress.Items, *u)
-			} else {
-				t.Log("Error casting resource to unstructured.Unstructured")
-				t.Fail()
-			}
-		}
-		err = wait.For(
-			conditions.New(r).ResourcesFound(&ress),
-			wait.WithInterval(100*time.Millisecond),
-		)
-		if err != nil {
-			t.Log("Error waiting for CRD: ", err)
-			t.Fail()
-		}
-
-		apis.AddToScheme(r.GetScheme())
-
-		err = decoder.DecodeEachFile(
-			ctx, os.DirFS(filepath.Join(testdataPath, "compositions")), "focus.yaml",
-			decoder.CreateIgnoreAlreadyExists(r),
-		)
-		if err != nil {
-			t.Log("Error decoding Compositions: ", err)
-			t.Fail()
-		}
-
-		objs, err = decoder.DecodeAllFiles(ctx, os.DirFS(filepath.Join(testdataPath, "compositions")), "focus.yaml")
-		if err != nil {
-			t.Log("Error decoding compositions: ", err)
-			t.Fail()
-		}
-
-		for _, obj := range objs {
-			comp := k8s.Object(obj)
-			err = r.Get(ctx, comp.GetName(), comp.GetNamespace(), comp)
-			if err != nil {
-				t.Log("Error getting composition: ", err)
-				t.Fail()
-			}
-			t.Log("Composition ID", comp.GetUID())
-
-			res, err := cli.GetComposition(string(comp.GetUID()), comp.GetNamespace())
-			if err != nil {
-				t.Log("Error getting composition by ID: ", err)
-				t.Fail()
-			}
-
-			if res.GetUID() != comp.GetUID() {
-				t.Log("Composition ID mismatch")
-				t.Fail()
-			}
-		}
-
-		return ctx
-	}).Assess("Testing Not Found", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
-		dynamic := dynamic.NewForConfigOrDie(c.Client().RESTConfig())
-		discovery := discovery.NewDiscoveryClientForConfigOrDie(c.Client().RESTConfig())
-		cachedDisc := memory.NewMemCacheClient(discovery)
-		cli := NewClient(dynamic, cachedDisc)
-
-		_, err := cli.GetComposition("notfound", namespace)
-		if !errors.IsNotFound(err) {
-			t.Log("Expected not found error")
-			t.Fail()
-		}
-
-		return ctx
-	}).Feature()
-
-	testenv.Test(t, f)
-}
-
 func TestGetCompositionDefinition(t *testing.T) {
 	os.Setenv("DEBUG", "1")
 
@@ -284,7 +92,7 @@ func TestGetCompositionDefinition(t *testing.T) {
 				t.Fail()
 			}
 
-			apis.AddToScheme(r.GetScheme())
+			// apis.AddToScheme(r.GetScheme())
 
 			err = decoder.DecodeEachFile(
 				ctx, os.DirFS(filepath.Join(testdataPath, "crds")), "*.yaml",
@@ -337,7 +145,7 @@ func TestGetCompositionDefinition(t *testing.T) {
 		}
 		r.WithNamespace(namespace)
 
-		apis.AddToScheme(r.GetScheme())
+		// apis.AddToScheme(r.GetScheme())
 
 		objs, err := decoder.DecodeAllFiles(ctx, os.DirFS(filepath.Join(testdataPath, "compositiondefinitions")), "*.yaml")
 		if err != nil {
@@ -346,9 +154,7 @@ func TestGetCompositionDefinition(t *testing.T) {
 		}
 
 		dynamic := dynamic.NewForConfigOrDie(c.Client().RESTConfig())
-		discovery := discovery.NewDiscoveryClientForConfigOrDie(c.Client().RESTConfig())
-		cachedDisc := memory.NewMemCacheClient(discovery)
-		cli := NewClient(dynamic, cachedDisc)
+		cli := NewClient(dynamic)
 
 		for _, obj := range objs {
 			comp := k8s.Object(obj)
@@ -374,9 +180,7 @@ func TestGetCompositionDefinition(t *testing.T) {
 		return ctx
 	}).Assess("Testing Not Found", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 		dynamic := dynamic.NewForConfigOrDie(c.Client().RESTConfig())
-		discovery := discovery.NewDiscoveryClientForConfigOrDie(c.Client().RESTConfig())
-		cachedDisc := memory.NewMemCacheClient(discovery)
-		cli := NewClient(dynamic, cachedDisc)
+		cli := NewClient(dynamic)
 
 		_, err := cli.GetCompositionDefinition("notfound", namespace)
 		if !errors.IsNotFound(err) {
@@ -401,7 +205,7 @@ func TestGetSecret(t *testing.T) {
 				t.Fail()
 			}
 
-			apis.AddToScheme(r.GetScheme())
+			// apis.AddToScheme(r.GetScheme())
 
 			err = decoder.DecodeEachFile(
 				ctx, os.DirFS(filepath.Join(testdataPath, "secrets")), "*.yaml",
@@ -421,7 +225,7 @@ func TestGetSecret(t *testing.T) {
 		}
 		r.WithNamespace(namespace)
 
-		apis.AddToScheme(r.GetScheme())
+		// apis.AddToScheme(r.GetScheme())
 
 		objs, err := decoder.DecodeAllFiles(ctx, os.DirFS(filepath.Join(testdataPath, "secrets")), "*.yaml")
 		if err != nil {
@@ -440,9 +244,7 @@ func TestGetSecret(t *testing.T) {
 			key := sec.Data["token"]
 
 			dynamic := dynamic.NewForConfigOrDie(c.Client().RESTConfig())
-			discovery := discovery.NewDiscoveryClientForConfigOrDie(c.Client().RESTConfig())
-			cachedDisc := memory.NewMemCacheClient(discovery)
-			cli := NewClient(dynamic, cachedDisc)
+			cli := NewClient(dynamic)
 
 			retr, err := cli.GetSecret(rtv1.SecretKeySelector{
 				Key: "token",
