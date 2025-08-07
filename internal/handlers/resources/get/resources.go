@@ -1,18 +1,25 @@
 package resources
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
 
+	coreprovv1 "github.com/krateoplatformops/core-provider/apis/compositiondefinitions/v1alpha1"
+
 	"github.com/krateoplatformops/chart-inspector/internal/getter"
 	"github.com/krateoplatformops/chart-inspector/internal/handlers"
 	"github.com/krateoplatformops/chart-inspector/internal/helmclient"
+	"github.com/krateoplatformops/chart-inspector/internal/helper"
 	"github.com/krateoplatformops/chart-inspector/internal/tracer"
-	"github.com/krateoplatformops/snowplow/plumbing/http/response"
+	"github.com/krateoplatformops/plumbing/http/response"
 	"github.com/krateoplatformops/unstructured-runtime/pkg/meta"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	sigsyaml "sigs.k8s.io/yaml"
 )
 
@@ -31,59 +38,72 @@ var _ http.Handler = (*handler)(nil)
 // @Summary Get Helm chart resources
 // @Description Get Helm chart resources
 // @ID get-chart-resources
-// @Param compositionUID query string true "Composition name"
+// @Param compositionName query string true "Composition name"
 // @Param compositionNamespace query string true "Composition namespace"
-// @Param compositionDefinitionUID query string true "Composition definition name"
+// @Param compositionDefinitionName query string true "Composition definition name"
 // @Param compositionDefinitionNamespace query string true "Composition definition namespace"
+// @Param compositionDefinitionGroup query string false "Composition definition group" default(core.krateo.io)
+// @Param compositionDefinitionVersion query string false "Composition definition version" default(v1alpha1)
+// @Param compositionDefinitionResource query string false "Composition definition resource name" default(compositiondefinitions)
+// @Param compositionGroup query string false "Composition group" default(composition.krateo.io)
+// @Param compositionVersion query string true "Composition version"
+// @Param compositionResource query string true "Composition resource name"
 // @Produce json
 // @Success 200 {object} []Resource
 // @Router /resources [get]
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	compositionUID := r.URL.Query().Get("compositionUID")
+	compositionName := r.URL.Query().Get("compositionName")
 	compositionNamespace := r.URL.Query().Get("compositionNamespace")
-	compositionDefinitionUID := r.URL.Query().Get("compositionDefinitionUID")
+	compositionDefinitionName := r.URL.Query().Get("compositionDefinitionName")
 	compositionDefinitionNamespace := r.URL.Query().Get("compositionDefinitionNamespace")
+	compositionVersion := r.URL.Query().Get("compositionVersion")
+	compositionResource := r.URL.Query().Get("compositionResource")
 
-	if compositionUID == "" || compositionNamespace == "" || compositionDefinitionUID == "" || compositionDefinitionNamespace == "" {
-		h.Log.Error("missing required query parameters",
-			slog.String("compositionUID", compositionUID),
-			slog.String("compositionNamespace", compositionNamespace),
-			slog.String("compositionDefinitionUID", compositionDefinitionUID),
-			slog.String("compositionDefinitionNamespace", compositionDefinitionNamespace),
-		)
+	compositionGroup := helper.GetQueryParamWithDefault(r, "compositionGroup", "composition.krateo.io")
+	compositionDefinitionGroup := helper.GetQueryParamWithDefault(r, "compositionDefinitionGroup", "core.krateo.io")
+	compositionDefinitionVersion := helper.GetQueryParamWithDefault(r, "compositionDefinitionVersion", "v1alpha1")
+	compositionDefinitionResource := helper.GetQueryParamWithDefault(r, "compositionDefinitionResource", "compositiondefinitions")
+
+	log := h.Log.With(slog.String(
+		"compositionName", compositionName),
+		slog.String("compositionNamespace", compositionNamespace),
+		slog.String("compositionDefinitionName", compositionDefinitionName),
+		slog.String("compositionDefinitionNamespace", compositionDefinitionNamespace))
+
+	if compositionName == "" || compositionNamespace == "" || compositionDefinitionName == "" || compositionDefinitionNamespace == "" || compositionVersion == "" || compositionResource == "" {
+		log.Error("missing required query parameters")
 		response.BadRequest(w, fmt.Errorf("missing required query parameters"))
 		return
 	}
 
-	// Getting the resources
 	k8scli := getter.NewClient(
 		h.DynamicClient,
-		h.DiscoveryClient,
 	)
 
-	h.Log.Info("Handling request to get resources",
-		slog.String("compositionUID", compositionUID),
-		slog.String("compositionNamespace", compositionNamespace),
-		slog.String("compositionDefinitionUID", compositionDefinitionUID),
-		slog.String("compositionDefinitionNamespace", compositionDefinitionNamespace),
-	)
-
-	composition, err := k8scli.GetComposition(compositionUID, compositionNamespace)
-	if err != nil {
-		h.Log.Error("unable to get composition",
-			slog.String("compositionUID", compositionUID),
-			slog.String("compositionNamespace", compositionNamespace),
-			slog.Any("err", err),
-		)
-		response.InternalError(w, err)
-		return
+	compositionGVR := schema.GroupVersionResource{
+		Group:    compositionGroup,
+		Version:  compositionVersion,
+		Resource: compositionResource,
+	}
+	compositionDefinitionGVR := schema.GroupVersionResource{
+		Group:    compositionDefinitionGroup,
+		Version:  compositionDefinitionVersion,
+		Resource: compositionDefinitionResource,
 	}
 
-	compositionDefinition, err := k8scli.GetCompositionDefinition(compositionDefinitionUID, compositionDefinitionNamespace)
+	log.Info("Handling request to get resources")
+
+	composition, err := h.DynamicClient.
+		Resource(compositionGVR).
+		Namespace(compositionNamespace).
+		Get(context.Background(), compositionName, v1.GetOptions{})
 	if err != nil {
-		h.Log.Error("unable to get composition definition",
-			slog.String("compositionDefinitionUID", compositionDefinitionUID),
-			slog.String("compositionDefinitionNamespace", compositionDefinitionNamespace),
+		log.Error("unable to get composition",
+			slog.String("compositionName", compositionName),
+			slog.String("compositionNamespace", compositionNamespace),
+			slog.String("compositionVersion", compositionVersion),
+			slog.String("compositionResource", compositionResource),
+			slog.String("compositionGroup", compositionGroup),
 			slog.Any("err", err),
 		)
 		response.InternalError(w, err)
@@ -112,8 +132,27 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	bValues, err := ExtractValuesFromSpec(composition)
 	if err != nil {
 		h.Log.Error("unable to extract values from composition",
-			slog.String("compositionUID", compositionUID),
-			slog.String("compositionNamespace", compositionNamespace),
+			slog.Any("err", err),
+		)
+		response.InternalError(w, err)
+		return
+	}
+
+	compositionDefinitionU, err := h.DynamicClient.
+		Resource(compositionDefinitionGVR).
+		Namespace(compositionDefinitionNamespace).
+		Get(context.Background(), compositionDefinitionName, v1.GetOptions{})
+	if err != nil {
+		h.Log.Error("unable to get composition definition",
+			slog.Any("err", err),
+		)
+		response.InternalError(w, err)
+		return
+	}
+	var compositionDefinition coreprovv1.CompositionDefinition
+	err = runtime.DefaultUnstructuredConverter.FromUnstructured(compositionDefinitionU.Object, &compositionDefinition)
+	if err != nil {
+		h.Log.Error("unable to convert composition definition",
 			slog.Any("err", err),
 		)
 		response.InternalError(w, err)
@@ -133,8 +172,6 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		passwd, err := k8scli.GetSecret(compositionDefinition.Spec.Chart.Credentials.PasswordRef)
 		if err != nil {
 			h.Log.Error("unable to get secret",
-				slog.String("compositionUID", compositionUID),
-				slog.String("compositionNamespace", compositionNamespace),
 				slog.Any("err", err),
 			)
 			response.InternalError(w, err)
@@ -160,7 +197,6 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// write the response in JSON format
 	w.Header().Set("Content-Type", "application/json")
-	// w.WriteHeader(http.StatusOK)
 	enc := json.NewEncoder(w)
 	err = enc.Encode(resources)
 	if err != nil {
@@ -171,12 +207,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.Log.Info("Successfully handled request to get resources",
-		slog.String("compositionUID", compositionUID),
-		slog.String("compositionNamespace", compositionNamespace),
-		slog.String("compositionDefinitionUID", compositionDefinitionUID),
-		slog.String("compositionDefinitionNamespace", compositionDefinitionNamespace),
-	)
+	h.Log.Info("Successfully handled request to get resources")
 }
 
 func ExtractValuesFromSpec(un *unstructured.Unstructured) ([]byte, error) {

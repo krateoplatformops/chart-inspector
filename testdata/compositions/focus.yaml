@@ -1,5 +1,5 @@
 apiVersion: composition.krateo.io/v0-1-0
-kind: FocusDataPresentationAzure
+kind: FocusDataPresentationAzure4
 metadata:
   name: finops-example-azure-vm-pricing
   namespace: krateo-system

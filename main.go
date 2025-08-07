@@ -16,11 +16,9 @@ import (
 	"github.com/krateoplatformops/chart-inspector/internal/handlers"
 	getresources "github.com/krateoplatformops/chart-inspector/internal/handlers/resources/get"
 	"github.com/krateoplatformops/chart-inspector/internal/helmclient"
-	"github.com/krateoplatformops/snowplow/plumbing/env"
-	"github.com/krateoplatformops/snowplow/plumbing/prettylog"
+	"github.com/krateoplatformops/plumbing/env"
+	prettylog "github.com/krateoplatformops/plumbing/slogs/pretty"
 	httpSwagger "github.com/swaggo/http-swagger"
-	"k8s.io/client-go/discovery"
-	"k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -79,17 +77,10 @@ func main() {
 		log.Debug("Creating dynamic client.", "error", err)
 	}
 
-	discovery, err := discovery.NewDiscoveryClientForConfig(cfg)
-	if err != nil {
-		log.Debug("Creating discovery client.", "error", err)
-	}
-	cachedDisc := memory.NewMemCacheClient(discovery)
-
 	opts := handlers.HandlerOptions{
-		Log:             log,
-		Client:          http.DefaultClient,
-		DiscoveryClient: cachedDisc,
-		DynamicClient:   dyn,
+		Log:           log,
+		Client:        http.DefaultClient,
+		DynamicClient: dyn,
 		HelmClientOptions: ptr.To(helmclient.RestConfClientOptions{
 			RestConfig: cfg,
 		}),
