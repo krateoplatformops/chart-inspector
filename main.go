@@ -72,7 +72,7 @@ func main() {
 		log.Debug("Building kubeconfig.", "error", err)
 	}
 
-	cfg.QPS = -1
+	cfg.QPS = -1 // rely on k8s api server rate limiting
 
 	dyn, err := dynamic.NewForConfig(cfg)
 	if err != nil {
