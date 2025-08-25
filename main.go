@@ -72,6 +72,8 @@ func main() {
 		log.Debug("Building kubeconfig.", "error", err)
 	}
 
+	cfg.QPS = -1
+
 	dyn, err := dynamic.NewForConfig(cfg)
 	if err != nil {
 		log.Debug("Creating dynamic client.", "error", err)
