@@ -13,4 +13,5 @@ type HandlerOptions struct {
 	Client            *http.Client
 	HelmClientOptions *helmclient.RestConfClientOptions
 	DynamicClient     dynamic.Interface
+	KrateoNamespace   string
 }
