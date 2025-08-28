@@ -12,6 +12,7 @@ import (
 	"github.com/krateoplatformops/chart-inspector/internal/getter"
 	"github.com/krateoplatformops/chart-inspector/internal/handlers"
 	"github.com/krateoplatformops/chart-inspector/internal/helmclient"
+	"github.com/krateoplatformops/chart-inspector/internal/helmclient/tools"
 	"github.com/krateoplatformops/chart-inspector/internal/helper"
 	"github.com/krateoplatformops/chart-inspector/internal/tracer"
 	"github.com/krateoplatformops/plumbing/http/response"
@@ -21,6 +22,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	sigsyaml "sigs.k8s.io/yaml"
+)
+
+const (
+	AnnotationKeyReconciliationGracefullyPaused = "krateo.io/gracefully-paused"
 )
 
 type handler struct {
@@ -158,6 +163,17 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		response.InternalError(w, err)
 		return
 	}
+
+	bValues, err = tools.InjectValues(bValues, tools.CompositionValues{
+		KrateoNamespace:      h.KrateoNamespace,
+		CompositionName:      compositionName,
+		CompositionNamespace: compositionNamespace,
+		CompositionId:        string(composition.GetUID()),
+		CompositionGroup:     compositionGroup,
+		CompositionResource:  compositionResource,
+		CompositionKind:      composition.GetKind(),
+		GracefullyPaused:     composition.GetAnnotations()[AnnotationKeyReconciliationGracefullyPaused] == "true",
+	})
 
 	chartSpec := helmclient.ChartSpec{
 		InsecureSkipTLSverify: compositionDefinition.Spec.Chart.InsecureSkipVerifyTLS,

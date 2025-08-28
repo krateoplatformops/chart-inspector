@@ -38,6 +38,7 @@ func main() {
 	port := flag.Int("port", env.Int("PLUGIN_PORT", 8081), "port to listen on")
 	kubeconfig := flag.String("kubeconfig", env.String("KUBECONFIG", ""),
 		"absolute path to the kubeconfig file")
+	krateoNamespace := env.String("KRATEO_NAMESPACE", "krateo-system")
 
 	flag.Parse()
 
@@ -80,9 +81,10 @@ func main() {
 	}
 
 	opts := handlers.HandlerOptions{
-		Log:           log,
-		Client:        http.DefaultClient,
-		DynamicClient: dyn,
+		Log:             log,
+		Client:          http.DefaultClient,
+		DynamicClient:   dyn,
+		KrateoNamespace: krateoNamespace,
 		HelmClientOptions: ptr.To(helmclient.RestConfClientOptions{
 			RestConfig: cfg,
 		}),
