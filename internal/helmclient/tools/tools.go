@@ -55,11 +55,15 @@ type CompositionValues struct {
 // The modified values are returned as a byte slice.
 func InjectValues(dat []byte, opts CompositionValues) ([]byte, error) {
 	var err error
+	gracefullyPaused := "false"
 	if opts.GracefullyPaused {
-		dat, err = AddOrUpdateFieldInValues(dat, true, "global", "gracefullyPaused")
-		if err != nil {
-			return dat, fmt.Errorf("failed to add gracefullyPaused to values: %w", err)
-		}
+		gracefullyPaused = "true"
+	} else {
+		gracefullyPaused = "false"
+	}
+	dat, err = AddOrUpdateFieldInValues(dat, gracefullyPaused, "global", "gracefullyPaused")
+	if err != nil {
+		return dat, fmt.Errorf("failed to add gracefullyPaused to values: %w", err)
 	}
 
 	dat, err = AddOrUpdateFieldInValues(dat, opts.CompositionNamespace, "global", "compositionNamespace")
