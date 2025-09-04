@@ -111,7 +111,7 @@ func TestInjectValues(t *testing.T) {
 			},
 			expected: map[string]interface{}{
 				"global": map[string]interface{}{
-					"gracefullyPaused":            true,
+					"gracefullyPaused":            "true",
 					"compositionNamespace":        "default",
 					"compositionName":             "test-composition",
 					"krateoNamespace":             "krateo-system",
@@ -139,6 +139,7 @@ func TestInjectValues(t *testing.T) {
 			},
 			expected: map[string]interface{}{
 				"global": map[string]interface{}{
+					"gracefullyPaused":            "false",
 					"compositionNamespace":        "default",
 					"compositionName":             "test-composition",
 					"krateoNamespace":             "krateo-system",
@@ -168,6 +169,7 @@ func TestInjectValues(t *testing.T) {
 					"field": "value",
 				},
 				"global": map[string]interface{}{
+					"gracefullyPaused":            "false",
 					"existingGlobal":              "value",
 					"compositionNamespace":        "default",
 					"compositionName":             "test-composition",
