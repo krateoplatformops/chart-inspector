@@ -1045,7 +1045,7 @@ func (c *HelmClient) GetChartV2(spec *ChartInfo) (*chart.Chart, string, error) {
 		return nil, "", fmt.Errorf("failed to get chart %q: %w", spec.Url, err)
 	}
 
-	helmChart, err := loader.LoadArchive(bytes.NewReader(bChart))
+	helmChart, err := loader.LoadArchive(bChart)
 	if err != nil {
 		return nil, "", err
 	}
