@@ -11,6 +11,7 @@ import (
 
 	"github.com/krateoplatformops/chart-inspector/internal/getter"
 	"github.com/krateoplatformops/chart-inspector/internal/handlers"
+	"github.com/krateoplatformops/chart-inspector/internal/handlers/resources"
 	"github.com/krateoplatformops/chart-inspector/internal/helmclient"
 	"github.com/krateoplatformops/chart-inspector/internal/helmclient/tools"
 	"github.com/krateoplatformops/chart-inspector/internal/helper"
@@ -57,6 +58,14 @@ var _ http.Handler = (*handler)(nil)
 // @Success 200 {object} []Resource
 // @Router /resources [get]
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			h.Log.Error("panic in ServeHTTP",
+				slog.Any("panic", rec))
+			response.InternalError(w, fmt.Errorf("internal server error"))
+		}
+	}()
+
 	compositionName := r.URL.Query().Get("compositionName")
 	compositionNamespace := r.URL.Query().Get("compositionNamespace")
 	compositionDefinitionName := r.URL.Query().Get("compositionDefinitionName")
@@ -209,12 +218,17 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Getting the resources
-	resources := tracer.GetResources()
+	resLi := tracer.GetResources()
+
+	// assicurarsi di rispondere sempre con un array JSON invece di null/vuoto
+	if resLi == nil {
+		resLi = []resources.Resource{}
+	}
 
 	// write the response in JSON format
 	w.Header().Set("Content-Type", "application/json")
 	enc := json.NewEncoder(w)
-	err = enc.Encode(resources)
+	err = enc.Encode(resLi)
 	if err != nil {
 		h.Log.Error("unable to marshal resources",
 			slog.Any("err", err),

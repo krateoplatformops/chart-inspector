@@ -83,13 +83,5 @@ func (t *Tracer) RoundTrip(req *http.Request) (*http.Response, error) {
 		return resp, err
 	}
 
-	//Dump the response to t.OutFile.
-	_, err = httputil.DumpResponse(resp, req.URL.Query().Get("watch") != "true")
-	if err != nil {
-		return nil, err
-	}
-	// os.Stderr.Write(b)
-	// os.Stderr.Write([]byte{'\n'})
-
 	return resp, err
 }
