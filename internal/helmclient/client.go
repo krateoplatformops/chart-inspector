@@ -79,6 +79,15 @@ func NewClientFromRestConf(options *RestConfClientOptions) (Client, error) {
 	return newClient(options.Options, clientGetter, settings)
 }
 
+// NewClientFromRestConf returns a new Helm client constructed with the provided REST config options.
+func NewCachedClientFromRestConf(options *RestConfClientOptions, clientset *CachedClients) (Client, error) {
+	settings := cli.New()
+
+	clientGetter := NewCachedRESTClientGetter(options.Namespace, nil, options.RestConfig, clientset)
+
+	return newClient(options.Options, clientGetter, settings)
+}
+
 // newClient is used by both NewClientFromKubeConf and NewClientFromRestConf
 // and returns a new Helm client via the provided options and REST config.
 func newClient(options *Options, clientGetter genericclioptions.RESTClientGetter, settings *cli.EnvSettings) (Client, error) {
@@ -686,6 +695,8 @@ func (c *HelmClient) TemplateChartRaw(spec *ChartSpec, options *HelmTemplateOpti
 	client.ClientOnly = false
 	client.IncludeCRDs = true
 	client.DryRunOption = "server"
+	client.SkipSchemaValidation = true
+	client.DisableOpenAPIValidation = true
 
 	if options != nil {
 		client.KubeVersion = options.KubeVersion
@@ -1044,6 +1055,7 @@ func (c *HelmClient) GetChartV2(spec *ChartInfo) (*chart.Chart, string, error) {
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to get chart %q: %w", spec.Url, err)
 	}
+	defer bChart.Close()
 
 	helmChart, err := loader.LoadArchive(bChart)
 	if err != nil {

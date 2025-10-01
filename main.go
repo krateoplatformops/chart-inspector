@@ -4,8 +4,10 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
 	"log/slog"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"sync/atomic"
@@ -22,7 +24,6 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/utils/ptr"
 )
 
 var (
@@ -34,7 +35,7 @@ var (
 // @description   This is the API for the Chart Inspector service. It provides endpoints for inspecting Helm charts.
 // @BasePath		/
 func main() {
-	debugOn := flag.Bool("debug", env.Bool("PLUGIN_DEBUG", true), "dump verbose output")
+	debugOn := flag.Bool("debug", env.Bool("DEBUG", false), "dump verbose output")
 	port := flag.Int("port", env.Int("PLUGIN_PORT", 8081), "port to listen on")
 	kubeconfig := flag.String("kubeconfig", env.String("KUBECONFIG", ""),
 		"absolute path to the kubeconfig file")
@@ -48,6 +49,10 @@ func main() {
 	if *debugOn {
 		logLevel = slog.LevelDebug
 	}
+
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
 
 	lh := prettylog.New(&slog.HandlerOptions{
 		Level:     logLevel,
@@ -70,24 +75,39 @@ func main() {
 		cfg, err = rest.InClusterConfig()
 	}
 	if err != nil {
-		log.Debug("Building kubeconfig.", "error", err)
+		log.Error("Building kubeconfig.", "error", err)
+		os.Exit(1)
 	}
 
 	cfg.QPS = -1 // rely on k8s api server rate limiting
 
 	dyn, err := dynamic.NewForConfig(cfg)
 	if err != nil {
-		log.Debug("Creating dynamic client.", "error", err)
+		log.Error("Creating dynamic client.", "error", err)
+		os.Exit(1)
 	}
+
+	clientset, err := helmclient.NewCachedClients(cfg)
+	if err != nil {
+		log.Error("Creating cached clientset.", "error", err)
+		os.Exit(1)
+	}
+
+	// Start CRD informer to invalidate discovery cache on CRD changes
+	go func() {
+		if err := helmclient.StartCRDInformer(context.Background(), cfg, clientset, log); err != nil {
+			log.Error("Starting CRD informer", "error", err)
+		}
+	}()
 
 	opts := handlers.HandlerOptions{
 		Log:             log,
-		Client:          http.DefaultClient,
 		DynamicClient:   dyn,
 		KrateoNamespace: krateoNamespace,
-		HelmClientOptions: ptr.To(helmclient.RestConfClientOptions{
+		HelmClientOptions: helmclient.RestConfClientOptions{
 			RestConfig: cfg,
-		}),
+		},
+		Clientset: clientset,
 	}
 
 	healthy := int32(0)
@@ -117,6 +137,7 @@ func main() {
 		atomic.StoreInt32(&healthy, 1)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Error("could not listen on %s - %v", server.Addr, err)
+			os.Exit(1)
 		}
 	}()
 
@@ -135,6 +156,7 @@ func main() {
 	server.SetKeepAlivesEnabled(false)
 	if err := server.Shutdown(ctx); err != nil {
 		log.Error("server forced to shutdown", slog.Any("error", err))
+		os.Exit(1)
 	}
 
 	log.Info("server gracefully stopped")

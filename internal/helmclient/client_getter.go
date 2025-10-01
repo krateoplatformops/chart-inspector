@@ -7,6 +7,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 // NewRESTClientGetter returns a RESTClientGetter using the provided 'namespace', 'kubeConfig' and 'restConfig'.
@@ -72,4 +73,82 @@ func (c *RESTClientGetter) ToRawKubeConfigLoader() clientcmd.ClientConfig {
 	overrides.Context.Namespace = c.namespace
 
 	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides)
+}
+
+type CachedClients struct {
+	discoveryClient discovery.CachedDiscoveryInterface
+	_RESTMapper     meta.RESTMapper
+}
+
+func NewCachedClients(cfg *rest.Config) (CachedClients, error) {
+	discovery, err := discovery.NewDiscoveryClientForConfig(cfg)
+	if err != nil {
+		return CachedClients{}, err
+	}
+	cachedDiscovery := memory.NewMemCacheClient(discovery)
+	mapper := restmapper.NewDeferredDiscoveryRESTMapper(cachedDiscovery)
+	expander := restmapper.NewShortcutExpander(mapper, cachedDiscovery, nil)
+
+	return CachedClients{
+		discoveryClient: cachedDiscovery,
+		_RESTMapper:     expander,
+	}, nil
+}
+
+var _ clientcmd.ClientConfig = &namespaceClientConfig{}
+
+type namespaceClientConfig struct {
+	namespace string
+}
+
+func (c namespaceClientConfig) RawConfig() (clientcmdapi.Config, error) {
+	return clientcmdapi.Config{}, nil
+}
+
+func (c namespaceClientConfig) ClientConfig() (*rest.Config, error) {
+	return nil, nil
+}
+
+func (c namespaceClientConfig) Namespace() (string, bool, error) {
+	return c.namespace, false, nil
+}
+
+func (c namespaceClientConfig) ConfigAccess() clientcmd.ConfigAccess {
+	return nil
+}
+
+// NewRESTClientGetter returns a RESTClientGetter using the provided 'namespace', 'kubeConfig' and 'restConfig'.
+// source: https://github.com/helm/helm/issues/6910#issuecomment-601277026
+func NewCachedRESTClientGetter(namespace string, kubeConfig []byte, restConfig *rest.Config, clients *CachedClients, opts ...RESTClientOption) *CachedRESTClientGetter {
+	return &CachedRESTClientGetter{
+		kubeConfig:      kubeConfig,
+		restConfig:      restConfig,
+		discoveryClient: clients.discoveryClient,
+		restMapper:      clients._RESTMapper,
+		namespaceConfig: &namespaceClientConfig{namespace: namespace},
+		opts:            opts,
+	}
+}
+
+// ToRESTConfig returns a REST config build from a given kubeconfig
+func (c *CachedRESTClientGetter) ToRESTConfig() (*rest.Config, error) {
+	if c.restConfig != nil {
+		return c.restConfig, nil
+	}
+
+	return clientcmd.RESTConfigFromKubeConfig(c.kubeConfig)
+
+}
+
+// ToDiscoveryClient returns a CachedDiscoveryInterface that can be used as a discovery client.
+func (c *CachedRESTClientGetter) ToDiscoveryClient() (discovery.CachedDiscoveryInterface, error) {
+	return c.discoveryClient, nil
+}
+
+func (c *CachedRESTClientGetter) ToRESTMapper() (meta.RESTMapper, error) {
+	return c.restMapper, nil
+}
+
+func (c *CachedRESTClientGetter) ToRawKubeConfigLoader() clientcmd.ClientConfig {
+	return c.namespaceConfig
 }

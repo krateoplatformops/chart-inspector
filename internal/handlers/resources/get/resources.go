@@ -22,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/rest"
 	sigsyaml "sigs.k8s.io/yaml"
 )
 
@@ -58,13 +59,13 @@ var _ http.Handler = (*handler)(nil)
 // @Success 200 {object} []Resource
 // @Router /resources [get]
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	defer func() {
-		if rec := recover(); rec != nil {
-			h.Log.Error("panic in ServeHTTP",
-				slog.Any("panic", rec))
-			response.InternalError(w, fmt.Errorf("internal server error"))
-		}
-	}()
+	// defer func() {
+	// 	if rec := recover(); rec != nil {
+	// 		h.Log.Error("panic in ServeHTTP",
+	// 			slog.Any("panic", rec))
+	// 		response.InternalError(w, fmt.Errorf("internal server error"))
+	// 	}
+	// }()
 
 	compositionName := r.URL.Query().Get("compositionName")
 	compositionNamespace := r.URL.Query().Get("compositionNamespace")
@@ -125,18 +126,21 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tracer := &tracer.Tracer{}
-	// Getting the resources
-	h.HelmClientOptions.RestConfig.WrapTransport = func(rt http.RoundTripper) http.RoundTripper {
-		return tracer.WithRoundTripper(rt)
+	localOpts := h.HelmClientOptions
+	if localOpts.RestConfig != nil {
+		localOpts.RestConfig = rest.CopyConfig(localOpts.RestConfig)
+		localOpts.RestConfig.WrapTransport = func(rt http.RoundTripper) http.RoundTripper {
+			return tracer.WithRoundTripper(rt)
+		}
 	}
 
-	h.HelmClientOptions.Options = &helmclient.Options{
+	localOpts.Options = &helmclient.Options{
 		Namespace: composition.GetNamespace(),
 	}
 
-	helmcli, err := helmclient.NewClientFromRestConf(h.HelmClientOptions)
+	helmcli, err := helmclient.NewCachedClientFromRestConf(&localOpts, &h.Clientset)
 	if err != nil {
-		h.Log.Error("unable to create helm client",
+		log.Error("unable to create helm client",
 			slog.Any("err", err),
 		)
 		response.InternalError(w, err)
@@ -145,7 +149,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	bValues, err := ExtractValuesFromSpec(composition)
 	if err != nil {
-		h.Log.Error("unable to extract values from composition",
+		log.Error("unable to extract values from composition",
 			slog.Any("err", err),
 		)
 		response.InternalError(w, err)
@@ -157,7 +161,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Namespace(compositionDefinitionNamespace).
 		Get(context.Background(), compositionDefinitionName, v1.GetOptions{})
 	if err != nil {
-		h.Log.Error("unable to get composition definition",
+		log.Error("unable to get composition definition",
 			slog.Any("err", err),
 		)
 		response.InternalError(w, err)
@@ -166,7 +170,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var compositionDefinition coreprovv1.CompositionDefinition
 	err = runtime.DefaultUnstructuredConverter.FromUnstructured(compositionDefinitionU.Object, &compositionDefinition)
 	if err != nil {
-		h.Log.Error("unable to convert composition definition",
+		log.Error("unable to convert composition definition",
 			slog.Any("err", err),
 		)
 		response.InternalError(w, err)
@@ -183,6 +187,13 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		CompositionKind:      composition.GetKind(),
 		GracefullyPaused:     composition.GetAnnotations()[AnnotationKeyReconciliationGracefullyPaused] == "true",
 	})
+	if err != nil {
+		log.Error("unable to inject values",
+			slog.Any("err", err),
+		)
+		response.InternalError(w, err)
+		return
+	}
 
 	chartSpec := helmclient.ChartSpec{
 		InsecureSkipTLSverify: compositionDefinition.Spec.Chart.InsecureSkipVerifyTLS,
@@ -196,7 +207,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if compositionDefinition.Spec.Chart != nil && compositionDefinition.Spec.Chart.Credentials != nil {
 		passwd, err := k8scli.GetSecret(compositionDefinition.Spec.Chart.Credentials.PasswordRef)
 		if err != nil {
-			h.Log.Error("unable to get secret",
+			log.Error("unable to get secret",
 				slog.Any("err", err),
 			)
 			response.InternalError(w, err)
@@ -209,7 +220,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	_, err = helmcli.TemplateChartRaw(&chartSpec, nil)
 	if err != nil {
-		h.Log.Error("unable to template chart",
+		log.Error("unable to template chart",
 			slog.Any("err", err),
 		)
 
@@ -230,14 +241,14 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	enc := json.NewEncoder(w)
 	err = enc.Encode(resLi)
 	if err != nil {
-		h.Log.Error("unable to marshal resources",
+		log.Error("unable to marshal resources",
 			slog.Any("err", err),
 		)
 		response.InternalError(w, err)
 		return
 	}
 
-	h.Log.Info("Successfully handled request to get resources")
+	log.Info("Successfully handled request to get resources")
 }
 
 func ExtractValuesFromSpec(un *unstructured.Unstructured) ([]byte, error) {
