@@ -18,7 +18,6 @@ import (
 	"gotest.tools/v3/assert"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/utils/ptr"
 
 	"context"
 	"os"
@@ -174,14 +173,20 @@ func TestResourcesHandler(t *testing.T) {
 					values.Add("compositionNamespace", composition.GetNamespace())
 					req.URL.RawQuery = values.Encode()
 
+					clientset, err := helmclient.NewCachedClients(c.Client().RESTConfig())
+					if err != nil {
+						t.Fatal("Creating cached clientset.", err)
+					}
+
 					rec := httptest.NewRecorder()
 					h := GetResources(handlers.HandlerOptions{
 						Log:           slog.Default(),
-						Client:        http.DefaultClient,
 						DynamicClient: dynamic,
-						HelmClientOptions: ptr.To(helmclient.RestConfClientOptions{
+						HelmClientOptions: helmclient.RestConfClientOptions{
 							RestConfig: c.Client().RESTConfig(),
-						}),
+						},
+						Clientset:       clientset,
+						KrateoNamespace: "test-system",
 					})
 
 					h.ServeHTTP(rec, req)
@@ -239,14 +244,18 @@ func TestResourcesHandlerErrorCases(t *testing.T) {
 				t.Run(tt.name, func(t *testing.T) {
 					req := httptest.NewRequest(http.MethodGet, tt.url, nil)
 					rec := httptest.NewRecorder()
+					clientset, err := helmclient.NewCachedClients(c.Client().RESTConfig())
+					if err != nil {
+						t.Fatal("Creating cached clientset.", err)
+					}
 
 					h := GetResources(handlers.HandlerOptions{
 						Log:           slog.Default(),
-						Client:        http.DefaultClient,
 						DynamicClient: dynamic,
-						HelmClientOptions: ptr.To(helmclient.RestConfClientOptions{
+						HelmClientOptions: helmclient.RestConfClientOptions{
 							RestConfig: c.Client().RESTConfig(),
-						}),
+						},
+						Clientset: clientset,
 					})
 
 					h.ServeHTTP(rec, req)

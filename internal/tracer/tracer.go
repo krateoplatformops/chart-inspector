@@ -2,7 +2,6 @@ package tracer
 
 import (
 	"net/http"
-	"net/http/httputil"
 	"strings"
 
 	"github.com/krateoplatformops/chart-inspector/internal/handlers/resources"
@@ -29,14 +28,6 @@ func (t *Tracer) WithRoundTripper(rt http.RoundTripper) *Tracer {
 // response/error to t.OutFile on either side of the nested call.  WARNING: this
 // may output sensitive information including bearer tokens.
 func (t *Tracer) RoundTrip(req *http.Request) (*http.Response, error) {
-	// Dump the request to t.OutFile.
-	_, err := httputil.DumpRequestOut(req, true)
-	if err != nil {
-		return nil, err
-	}
-	// os.Stderr.Write(b)
-	// os.Stderr.Write([]byte{'\n'})
-
 	split := strings.Split(req.URL.Path, "/")
 
 	if len(split) > 2 {
@@ -77,9 +68,7 @@ func (t *Tracer) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	// Call the nested RoundTripper.
 	resp, err := t.RoundTripper.RoundTrip(req)
-	// If an error was returned, dump it to t.OutFile.
 	if err != nil {
-		// fmt.Fprintln(t.OutFile, err)
 		return resp, err
 	}
 
