@@ -181,7 +181,6 @@ func TestResourcesHandler(t *testing.T) {
 					rec := httptest.NewRecorder()
 					h := GetResources(handlers.HandlerOptions{
 						Log:           slog.Default(),
-						Client:        http.DefaultClient,
 						DynamicClient: dynamic,
 						HelmClientOptions: helmclient.RestConfClientOptions{
 							RestConfig: c.Client().RESTConfig(),
@@ -252,7 +251,6 @@ func TestResourcesHandlerErrorCases(t *testing.T) {
 
 					h := GetResources(handlers.HandlerOptions{
 						Log:           slog.Default(),
-						Client:        http.DefaultClient,
 						DynamicClient: dynamic,
 						HelmClientOptions: helmclient.RestConfClientOptions{
 							RestConfig: c.Client().RESTConfig(),
