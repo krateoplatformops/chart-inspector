@@ -95,7 +95,7 @@ func main() {
 
 	// Start CRD informer to invalidate discovery cache on CRD changes
 	go func() {
-		if err := helmclient.StartCRDInformer(context.Background(), cfg, clientset, log); err != nil {
+		if err := helmclient.StartCRDInformer(context.Background(), cfg, &clientset, log); err != nil {
 			log.Error("Starting CRD informer", "error", err)
 		}
 	}()
@@ -107,7 +107,7 @@ func main() {
 		HelmClientOptions: helmclient.RestConfClientOptions{
 			RestConfig: cfg,
 		},
-		Clientset: clientset,
+		Clientset: &clientset,
 	}
 
 	healthy := int32(0)

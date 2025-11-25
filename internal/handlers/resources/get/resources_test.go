@@ -185,7 +185,7 @@ func TestResourcesHandler(t *testing.T) {
 						HelmClientOptions: helmclient.RestConfClientOptions{
 							RestConfig: c.Client().RESTConfig(),
 						},
-						Clientset:       clientset,
+						Clientset:       &clientset,
 						KrateoNamespace: "test-system",
 					})
 
@@ -255,7 +255,7 @@ func TestResourcesHandlerErrorCases(t *testing.T) {
 						HelmClientOptions: helmclient.RestConfClientOptions{
 							RestConfig: c.Client().RESTConfig(),
 						},
-						Clientset: clientset,
+						Clientset: &clientset,
 					})
 
 					h.ServeHTTP(rec, req)
