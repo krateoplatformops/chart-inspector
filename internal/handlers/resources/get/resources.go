@@ -59,14 +59,6 @@ var _ http.Handler = (*handler)(nil)
 // @Success 200 {object} []Resource
 // @Router /resources [get]
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// defer func() {
-	// 	if rec := recover(); rec != nil {
-	// 		h.Log.Error("panic in ServeHTTP",
-	// 			slog.Any("panic", rec))
-	// 		response.InternalError(w, fmt.Errorf("internal server error"))
-	// 	}
-	// }()
-
 	compositionName := r.URL.Query().Get("compositionName")
 	compositionNamespace := r.URL.Query().Get("compositionNamespace")
 	compositionDefinitionName := r.URL.Query().Get("compositionDefinitionName")
@@ -138,7 +130,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Namespace: composition.GetNamespace(),
 	}
 
-	helmcli, err := helmclient.NewCachedClientFromRestConf(&localOpts, &h.Clientset)
+	helmcli, err := helmclient.NewCachedClientFromRestConf(&localOpts, h.Clientset)
 	if err != nil {
 		log.Error("unable to create helm client",
 			slog.Any("err", err),

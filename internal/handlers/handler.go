@@ -8,10 +8,9 @@ import (
 )
 
 type HandlerOptions struct {
-	Log *slog.Logger
-	// Client            *http.Client
+	Log               *slog.Logger
 	HelmClientOptions helmclient.RestConfClientOptions
-	Clientset         helmclient.CachedClients
+	Clientset         *helmclient.CachedClients
 	DynamicClient     dynamic.Interface
 	KrateoNamespace   string
 }

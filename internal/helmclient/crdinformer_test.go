@@ -19,7 +19,7 @@ func newFakeInvalidator() *fakeInvalidator {
 	return &fakeInvalidator{ch: make(chan struct{}, 10)}
 }
 
-func (f *fakeInvalidator) Invalidate() {
+func (f *fakeInvalidator) Reset() {
 	select {
 	case f.ch <- struct{}{}:
 	default:

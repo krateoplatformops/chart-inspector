@@ -14,16 +14,16 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-func StartCRDInformer(ctx context.Context, cfg *rest.Config, clients CachedClients, log *slog.Logger) error {
+func StartCRDInformer(ctx context.Context, cfg *rest.Config, clients *CachedClients, log *slog.Logger) error {
 	apiExtCli, err := apiextclient.NewForConfig(cfg)
 	if err != nil {
 		return err
 	}
 	// reuse testable implementation
-	return StartCRDInformerWithClientset(ctx, apiExtCli, clients.discoveryClient, log)
+	return StartCRDInformerWithClientset(ctx, apiExtCli, clients.mapper, log)
 }
 
-func StartCRDInformerWithClientset(ctx context.Context, apiExtCli apiextclient.Interface, invalidator interface{ Invalidate() }, log *slog.Logger) error {
+func StartCRDInformerWithClientset(ctx context.Context, apiExtCli apiextclient.Interface, invalidator interface{ Reset() }, log *slog.Logger) error {
 	if apiExtCli == nil {
 		return nil
 	}
@@ -34,7 +34,7 @@ func StartCRDInformerWithClientset(ctx context.Context, apiExtCli apiextclient.I
 	handler := cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			if invalidator != nil {
-				invalidator.Invalidate()
+				invalidator.Reset()
 				if log != nil {
 					crd, ok := obj.(*apixv1.CustomResourceDefinition)
 					if !ok {
@@ -58,7 +58,7 @@ func StartCRDInformerWithClientset(ctx context.Context, apiExtCli apiextclient.I
 			}
 
 			if invalidator != nil {
-				invalidator.Invalidate()
+				invalidator.Reset()
 				if log != nil {
 					log.Debug("discovery cache invalidated: CRD spec changed", "name", newCRD.Name)
 				}
@@ -66,7 +66,7 @@ func StartCRDInformerWithClientset(ctx context.Context, apiExtCli apiextclient.I
 		},
 		DeleteFunc: func(obj interface{}) {
 			if invalidator != nil {
-				invalidator.Invalidate()
+				invalidator.Reset()
 				if log != nil {
 					crd, ok := obj.(*apixv1.CustomResourceDefinition)
 					if !ok {

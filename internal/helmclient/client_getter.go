@@ -76,6 +76,7 @@ func (c *RESTClientGetter) ToRawKubeConfigLoader() clientcmd.ClientConfig {
 }
 
 type CachedClients struct {
+	mapper          *restmapper.DeferredDiscoveryRESTMapper
 	discoveryClient discovery.CachedDiscoveryInterface
 	_RESTMapper     meta.RESTMapper
 }
@@ -90,6 +91,7 @@ func NewCachedClients(cfg *rest.Config) (CachedClients, error) {
 	expander := restmapper.NewShortcutExpander(mapper, cachedDiscovery, nil)
 
 	return CachedClients{
+		mapper:          mapper,
 		discoveryClient: cachedDiscovery,
 		_RESTMapper:     expander,
 	}, nil
