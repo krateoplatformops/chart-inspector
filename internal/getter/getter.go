@@ -15,6 +15,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
+const compositionVersionLabel = "krateo.io/composition-version"
+
 func (c *Client) searchComposition(uid string, namespace string) (*unstructured.Unstructured, error) {
 	_, apiResourceList, err := c.discovery.ServerGroupsAndResources()
 	if err != nil {
@@ -45,7 +47,8 @@ func (c *Client) searchComposition(uid string, namespace string) (*unstructured.
 					}
 
 					for _, item := range li.Items {
-						if string(item.GetUID()) == uid {
+						labels := item.GetLabels()
+						if labels[compositionVersionLabel] == gvr.Version && string(item.GetUID()) == uid {
 							return &item, nil
 						}
 					}

@@ -51,20 +51,10 @@ func TestMain(m *testing.M) {
 	clusterName = "krateo"
 	testenv = env.New()
 
-	// kubeconfig := filepath.Join(os.Getenv("HOME"), ".kube", "config")
-
 	testenv.Setup(
 		envfuncs.CreateCluster(kind.NewProvider(), clusterName),
 		e2e.CreateNamespace(namespace),
 		e2e.CreateNamespace(altNamespace),
-
-		// func(ctx context.Context, c *envconf.Config) (context.Context, error) {
-
-		// 	// update envconfig  with kubeconfig
-		// 	c.WithKubeconfigFile(kubeconfig)
-
-		// 	return ctx, nil
-		// },
 
 		func(ctx context.Context, cfg *envconf.Config) (context.Context, error) {
 			r, err := resources.New(cfg.Client().RESTConfig())
@@ -87,7 +77,7 @@ func TestGetComposition(t *testing.T) {
 	os.Setenv("DEBUG", "1")
 
 	f := features.New("Setup").
-		Setup(e2e.Logger("test")).
+		Setup(e2e.Logger("test12")).
 		Setup(func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
 			r, err := resources.New(cfg.Client().RESTConfig())
 			if err != nil {
@@ -161,7 +151,8 @@ func TestGetComposition(t *testing.T) {
 		cli := NewClient(dynamic, cachedDisc)
 
 		for _, obj := range objs {
-			comp := k8s.Object(obj)
+			// convert obj to unstructured.Unstructured
+			comp := k8s.Object(obj).(*unstructured.Unstructured)
 			err = r.Get(ctx, comp.GetName(), comp.GetNamespace(), comp)
 			if err != nil {
 				t.Log("Error getting composition: ", err)
@@ -177,6 +168,11 @@ func TestGetComposition(t *testing.T) {
 
 			if res.GetUID() != comp.GetUID() {
 				t.Log("Composition ID mismatch")
+				t.Fail()
+			}
+
+			if res.GetAPIVersion() != comp.GetAPIVersion() {
+				t.Log("Composition APIVersion mismatch")
 				t.Fail()
 			}
 		}
