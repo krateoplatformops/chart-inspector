@@ -5,6 +5,7 @@ metadata:
   namespace: krateo-system
   labels:
     krateo.io/release-name: focus-1
+    krateo.io/composition-version: v0-1-0
 spec:
   annotationKey: krateo-finops-focus-resource
   filter: serviceName eq 'Virtual Machines' and skuId eq 'DZH318Z0K9JH/00KX' and armRegionName eq 'westus3' and type eq 'Consumption'

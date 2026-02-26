@@ -5,6 +5,7 @@ metadata:
      "krateo.io/connector-verbose": "true"
   labels:
     krateo.io/release-name: fireworks-app-8
+    krateo.io/composition-version: v1-1-10
   name: fireworksapp-8
   namespace: demo-system
 spec:
