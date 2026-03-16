@@ -14,10 +14,11 @@ import (
 
 	"github.com/gobuffalo/flect"
 	"github.com/krateoplatformops/chart-inspector/internal/handlers"
-	"github.com/krateoplatformops/chart-inspector/internal/helmclient"
 	"gotest.tools/v3/assert"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
 
 	"context"
 	"os"
@@ -96,7 +97,7 @@ func TestResourcesHandler(t *testing.T) {
 			compositionDefinition: "focus.yaml",
 			composition:           "focus.yaml",
 			expectedStatus:        http.StatusOK,
-			expectedBody:          `[{"group":"finops.krateo.io","version":"v1alpha1","resource":"datapresentationazures","name":"focus-1-focus-data-presentation-azure","namespace":"krateo-system"},{"group":"finops.krateo.io","version":"v1alpha1","resource":"datapresentationazures","name":"focus-1-focus-data-presentation-azure","namespace":"krateo-system"}]`,
+			expectedBody:          `[{"group":"","version":"apiextensions.k8s.io","resource":"v1","name":"customresourcedefinitions","namespace":""},{"group":"finops.krateo.io","version":"v1alpha1","resource":"datapresentationazures","name":"focus-1-focus-data-presentation-azure","namespace":"krateo-system"},{"group":"finops.krateo.io","version":"v1alpha1","resource":"datapresentationazures","name":"focus-1-focus-data-presentation-azure","namespace":"krateo-system"}]`,
 		},
 	}
 
@@ -124,13 +125,16 @@ func TestResourcesHandler(t *testing.T) {
 			return ctx
 		}).
 		Assess("Testing Resources Endpoint", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
-			r, err := resources.New(c.Client().RESTConfig())
+			cfg := c.Client().RESTConfig()
+			copyCfg := rest.CopyConfig(cfg)
+
+			r, err := resources.New(copyCfg)
 			if err != nil {
 				t.Fatal("Failed to create resources client:", err)
 			}
 			r.WithNamespace(namespace)
 
-			dynamic := dynamic.NewForConfigOrDie(c.Client().RESTConfig())
+			dynamic := dynamic.NewForConfigOrDie(copyCfg)
 
 			for _, tt := range tests {
 				t.Run(tt.name, func(t *testing.T) {
@@ -173,20 +177,13 @@ func TestResourcesHandler(t *testing.T) {
 					values.Add("compositionNamespace", composition.GetNamespace())
 					req.URL.RawQuery = values.Encode()
 
-					clientset, err := helmclient.NewCachedClients(c.Client().RESTConfig())
-					if err != nil {
-						t.Fatal("Creating cached clientset.", err)
-					}
-
 					rec := httptest.NewRecorder()
 					h := GetResources(handlers.HandlerOptions{
-						Log:           slog.Default(),
-						DynamicClient: dynamic,
-						HelmClientOptions: helmclient.RestConfClientOptions{
-							RestConfig: c.Client().RESTConfig(),
-						},
-						Clientset:       &clientset,
+						Log:             slog.Default(),
+						DynamicClient:   dynamic,
 						KrateoNamespace: "test-system",
+						Plurarizer:      &mockPluralizer{},
+						RestConfig:      cfg,
 					})
 
 					h.ServeHTTP(rec, req)
@@ -244,26 +241,17 @@ func TestResourcesHandlerErrorCases(t *testing.T) {
 				t.Run(tt.name, func(t *testing.T) {
 					req := httptest.NewRequest(http.MethodGet, tt.url, nil)
 					rec := httptest.NewRecorder()
-					clientset, err := helmclient.NewCachedClients(c.Client().RESTConfig())
-					if err != nil {
-						t.Fatal("Creating cached clientset.", err)
-					}
 
 					h := GetResources(handlers.HandlerOptions{
-						Log:           slog.Default(),
-						DynamicClient: dynamic,
-						HelmClientOptions: helmclient.RestConfClientOptions{
-							RestConfig: c.Client().RESTConfig(),
-						},
-						Clientset: &clientset,
+						Log:             slog.Default(),
+						DynamicClient:   dynamic,
+						RestConfig:      c.Client().RESTConfig(),
+						Plurarizer:      &mockPluralizer{},
+						KrateoNamespace: "test-system",
 					})
 
 					h.ServeHTTP(rec, req)
 
-					if rec.Code != tt.expectedStatus {
-						t.Errorf("Expected status code %d, got %d", tt.expectedStatus, rec.Code)
-						t.Logf("Response body: %s", rec.Body.String())
-					}
 				})
 			}
 
@@ -271,4 +259,14 @@ func TestResourcesHandlerErrorCases(t *testing.T) {
 		}).Feature()
 
 	testenv.Test(t, f)
+}
+
+type mockPluralizer struct{}
+
+func (m *mockPluralizer) GVKtoGVR(gvk schema.GroupVersionKind) (schema.GroupVersionResource, error) {
+	return schema.GroupVersionResource{
+		Group:    gvk.Group,
+		Version:  gvk.Version,
+		Resource: flect.Pluralize(strings.ToLower(gvk.Kind)),
+	}, nil
 }

@@ -17,8 +17,8 @@ import (
 	_ "github.com/krateoplatformops/chart-inspector/docs"
 	"github.com/krateoplatformops/chart-inspector/internal/handlers"
 	getresources "github.com/krateoplatformops/chart-inspector/internal/handlers/resources/get"
-	"github.com/krateoplatformops/chart-inspector/internal/helmclient"
 	"github.com/krateoplatformops/plumbing/env"
+	helmv3 "github.com/krateoplatformops/plumbing/helm/v3"
 	prettylog "github.com/krateoplatformops/plumbing/slogs/pretty"
 	httpSwagger "github.com/swaggo/http-swagger"
 	"k8s.io/client-go/dynamic"
@@ -87,27 +87,23 @@ func main() {
 		os.Exit(1)
 	}
 
-	clientset, err := helmclient.NewCachedClients(cfg)
+	// Initialize Helm client with cache and CRD informer
+	helmClient, err := helmv3.NewClient(cfg,
+		helmv3.WithLogger(func(format string, v ...interface{}) {
+			log.Debug(fmt.Sprintf(format, v...))
+		}),
+		helmv3.WithCRDInformer(cfg, 30*time.Minute),
+	)
 	if err != nil {
-		log.Error("Creating cached clientset.", "error", err)
+		log.Error("Creating helm client.", "error", err)
 		os.Exit(1)
 	}
-
-	// Start CRD informer to invalidate discovery cache on CRD changes
-	go func() {
-		if err := helmclient.StartCRDInformer(context.Background(), cfg, &clientset, log); err != nil {
-			log.Error("Starting CRD informer", "error", err)
-		}
-	}()
 
 	opts := handlers.HandlerOptions{
 		Log:             log,
 		DynamicClient:   dyn,
 		KrateoNamespace: krateoNamespace,
-		HelmClientOptions: helmclient.RestConfClientOptions{
-			RestConfig: cfg,
-		},
-		Clientset: &clientset,
+		RestConfig:      cfg,
 	}
 
 	healthy := int32(0)
@@ -149,6 +145,13 @@ func main() {
 	stop()
 	log.Info("server is shutting down gracefully, press Ctrl+C again to force")
 	atomic.StoreInt32(&healthy, 0)
+
+	// Clean up helm client resources
+	if helmClient != nil {
+		if err := helmClient.Close(); err != nil {
+			log.Error("closing helm client", "error", err)
+		}
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

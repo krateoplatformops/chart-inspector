@@ -6,24 +6,25 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	coreprovv1 "github.com/krateoplatformops/core-provider/apis/compositiondefinitions/v1alpha1"
+	"github.com/krateoplatformops/unstructured-runtime/pkg/meta"
 
 	"github.com/krateoplatformops/chart-inspector/internal/getter"
 	"github.com/krateoplatformops/chart-inspector/internal/handlers"
 	"github.com/krateoplatformops/chart-inspector/internal/handlers/resources"
-	"github.com/krateoplatformops/chart-inspector/internal/helmclient"
-	"github.com/krateoplatformops/chart-inspector/internal/helmclient/tools"
 	"github.com/krateoplatformops/chart-inspector/internal/helper"
 	"github.com/krateoplatformops/chart-inspector/internal/tracer"
+	compositionMeta "github.com/krateoplatformops/composition-dynamic-controller/pkg/meta"
+	helmconfig "github.com/krateoplatformops/plumbing/helm"
+	helmutils "github.com/krateoplatformops/plumbing/helm/utils"
+	helmv3 "github.com/krateoplatformops/plumbing/helm/v3"
 	"github.com/krateoplatformops/plumbing/http/response"
-	"github.com/krateoplatformops/unstructured-runtime/pkg/meta"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
-	sigsyaml "sigs.k8s.io/yaml"
 )
 
 const (
@@ -117,29 +118,8 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tracer := &tracer.Tracer{}
-	localOpts := h.HelmClientOptions
-	if localOpts.RestConfig != nil {
-		localOpts.RestConfig = rest.CopyConfig(localOpts.RestConfig)
-		localOpts.RestConfig.WrapTransport = func(rt http.RoundTripper) http.RoundTripper {
-			return tracer.WithRoundTripper(rt)
-		}
-	}
-
-	localOpts.Options = &helmclient.Options{
-		Namespace: composition.GetNamespace(),
-	}
-
-	helmcli, err := helmclient.NewCachedClientFromRestConf(&localOpts, h.Clientset)
-	if err != nil {
-		log.Error("unable to create helm client",
-			slog.Any("err", err),
-		)
-		response.InternalError(w, err)
-		return
-	}
-
-	bValues, err := ExtractValuesFromSpec(composition)
+	// NOTE: bValues are extracted and injected with composition context
+	bValuesMap, err := helmutils.ValuesFromSpec(composition)
 	if err != nil {
 		log.Error("unable to extract values from composition",
 			slog.Any("err", err),
@@ -147,6 +127,38 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		response.InternalError(w, err)
 		return
 	}
+	err = bValuesMap.InjectGlobalValues(composition, h.Plurarizer, h.KrateoNamespace)
+	if err != nil {
+		log.Error("unable to inject global values",
+			slog.Any("err", err),
+		)
+		response.InternalError(w, err)
+		return
+	}
+
+	tracer := &tracer.Tracer{}
+	// Create a wrapped REST config with the tracer RoundTripper for this request
+	wrappedCfg := rest.CopyConfig(h.RestConfig)
+	wrappedCfg.WrapTransport = func(rt http.RoundTripper) http.RoundTripper {
+		return tracer.WithRoundTripper(rt)
+	}
+
+	// Create a temporary helm client with tracer integration for this request
+	tracedHelmClient, err := helmv3.NewClient(wrappedCfg,
+		helmv3.WithLogger(func(format string, v ...interface{}) {
+			log.Debug(fmt.Sprintf(format, v...))
+		}),
+		helmv3.WithNamespace(compositionNamespace),
+		helmv3.WithCRDInformer(wrappedCfg, 30*time.Minute),
+	)
+	if err != nil {
+		log.Error("unable to create traced helm client",
+			slog.Any("err", err),
+		)
+		response.InternalError(w, err)
+		return
+	}
+	defer tracedHelmClient.Close()
 
 	compositionDefinitionU, err := h.DynamicClient.
 		Resource(compositionDefinitionGVR).
@@ -169,34 +181,28 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	bValues, err = tools.InjectValues(bValues, tools.CompositionValues{
-		KrateoNamespace:      h.KrateoNamespace,
-		CompositionName:      compositionName,
-		CompositionNamespace: compositionNamespace,
-		CompositionId:        string(composition.GetUID()),
-		CompositionGroup:     compositionGroup,
-		CompositionResource:  compositionResource,
-		CompositionKind:      composition.GetKind(),
-		GracefullyPaused:     composition.GetAnnotations()[AnnotationKeyReconciliationGracefullyPaused] == "true",
-	})
-	if err != nil {
-		log.Error("unable to inject values",
-			slog.Any("err", err),
-		)
-		response.InternalError(w, err)
-		return
+	// Install the Helm chart with DryRun to capture templated resources
+	// Set namespace to composition's namespace for proper resource isolation
+	installCfg := &helmconfig.InstallConfig{
+		ActionConfig: &helmconfig.ActionConfig{
+			ChartVersion:          compositionDefinition.Spec.Chart.Version,
+			ChartName:             compositionDefinition.Spec.Chart.Repo,
+			Values:                bValuesMap,
+			Username:              "",
+			Password:              "",
+			InsecureSkipTLSverify: compositionDefinition.Spec.Chart.InsecureSkipVerifyTLS,
+			DryRun:                helmconfig.DryRunServer,
+			IncludeCRDs:           true,
+			SkipCRDs:              false,
+		},
+		CreateNamespace: true,
 	}
 
-	chartSpec := helmclient.ChartSpec{
-		InsecureSkipTLSverify: compositionDefinition.Spec.Chart.InsecureSkipVerifyTLS,
-		ReleaseName:           meta.GetReleaseName(composition),
-		Namespace:             composition.GetNamespace(),
-		ChartName:             compositionDefinition.Spec.Chart.Url,
-		Version:               compositionDefinition.Spec.Chart.Version,
-		Repo:                  compositionDefinition.Spec.Chart.Repo,
-		ValuesYaml:            string(bValues),
-	}
+	// Retrieve credentials from secret if specified
 	if compositionDefinition.Spec.Chart != nil && compositionDefinition.Spec.Chart.Credentials != nil {
+		installCfg.ActionConfig.Username = compositionDefinition.Spec.Chart.Credentials.Username
+
+		// Retrieve password from secret
 		passwd, err := k8scli.GetSecret(compositionDefinition.Spec.Chart.Credentials.PasswordRef)
 		if err != nil {
 			log.Error("unable to get secret",
@@ -205,17 +211,15 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			response.InternalError(w, err)
 			return
 		}
-
-		chartSpec.Username = compositionDefinition.Spec.Chart.Credentials.Username
-		chartSpec.Password = passwd
+		installCfg.ActionConfig.Password = passwd
 	}
 
-	_, err = helmcli.TemplateChartRaw(&chartSpec, nil)
+	// Install with DryRun to get templated manifest using traced helm client
+	_, err = tracedHelmClient.Install(context.Background(), compositionMeta.GetReleaseName(composition), compositionDefinition.Spec.Chart.Url, installCfg)
 	if err != nil {
 		log.Error("unable to template chart",
 			slog.Any("err", err),
 		)
-
 		response.InternalError(w, err)
 		return
 	}
@@ -223,9 +227,21 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Getting the resources
 	resLi := tracer.GetResources()
 
-	// assicurarsi di rispondere sempre con un array JSON invece di null/vuoto
+	// Ensure resLi is not nil to avoid null in JSON response
 	if resLi == nil {
 		resLi = []resources.Resource{}
+	}
+	if meta.IsVerbose(composition) {
+		b, err := json.Marshal(resLi)
+		if err != nil {
+			log.Error("unable to marshal resources for logging",
+				slog.Any("err", err),
+			)
+		} else {
+			log.Debug("Retrieved resources",
+				slog.String("resources", string(b)),
+			)
+		}
 	}
 
 	// write the response in JSON format
@@ -241,20 +257,4 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Info("Successfully handled request to get resources")
-}
-
-func ExtractValuesFromSpec(un *unstructured.Unstructured) ([]byte, error) {
-	if un == nil {
-		return nil, nil
-	}
-
-	spec, ok, err := unstructured.NestedMap(un.UnstructuredContent(), "spec")
-	if err != nil {
-		return nil, err
-	}
-	if !ok {
-		return nil, nil
-	}
-
-	return sigsyaml.Marshal(spec)
 }

@@ -3,6 +3,7 @@ package tracer
 import (
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/krateoplatformops/chart-inspector/internal/handlers/resources"
 )
@@ -12,11 +13,17 @@ import (
 // including bearer tokens.
 type Tracer struct {
 	http.RoundTripper
+	mu        sync.Mutex
 	resources []resources.Resource
 }
 
 func (t *Tracer) GetResources() []resources.Resource {
-	return t.resources
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	// Return a copy to prevent external modification
+	resCopy := make([]resources.Resource, len(t.resources))
+	copy(resCopy, t.resources)
+	return resCopy
 }
 
 func (t *Tracer) WithRoundTripper(rt http.RoundTripper) *Tracer {
@@ -30,39 +37,48 @@ func (t *Tracer) WithRoundTripper(rt http.RoundTripper) *Tracer {
 func (t *Tracer) RoundTrip(req *http.Request) (*http.Response, error) {
 	split := strings.Split(req.URL.Path, "/")
 
+	// Capture resource metadata under mutex protection
 	if len(split) > 2 {
+		var resource *resources.Resource
+
 		if len(split) == 8 && (split[1] == "apis" || split[1] == "api") && split[4] == "namespaces" {
-			t.resources = append(t.resources, resources.Resource{
+			resource = &resources.Resource{
 				Group:     split[2],
 				Version:   split[3],
 				Resource:  split[6],
 				Namespace: split[5],
 				Name:      split[7],
-			})
+			}
 		} else if len(split) == 7 && (split[1] == "apis" || split[1] == "api") && split[3] == "namespaces" {
-			t.resources = append(t.resources, resources.Resource{
+			resource = &resources.Resource{
 				Group:     "",
 				Version:   split[2],
 				Resource:  split[5],
 				Namespace: split[4],
 				Name:      split[6],
-			})
+			}
 		} else if len(split) == 6 && (split[1] == "apis" || split[1] == "api") {
-			t.resources = append(t.resources, resources.Resource{
+			resource = &resources.Resource{
 				Group:     split[2],
 				Version:   split[3],
 				Resource:  split[4],
 				Namespace: "",
 				Name:      split[5],
-			})
+			}
 		} else if len(split) == 5 && (split[1] == "apis" || split[1] == "api") {
-			t.resources = append(t.resources, resources.Resource{
+			resource = &resources.Resource{
 				Group:     "",
 				Version:   split[2],
 				Resource:  split[3],
 				Namespace: "",
 				Name:      split[4],
-			})
+			}
+		}
+
+		if resource != nil {
+			t.mu.Lock()
+			t.resources = append(t.resources, *resource)
+			t.mu.Unlock()
 		}
 	}
 
