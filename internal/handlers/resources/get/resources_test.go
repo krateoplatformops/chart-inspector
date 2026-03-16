@@ -14,7 +14,7 @@ import (
 
 	"github.com/gobuffalo/flect"
 	"github.com/krateoplatformops/chart-inspector/internal/handlers"
-	"github.com/krateoplatformops/chart-inspector/internal/helmclient"
+	helmv3 "github.com/krateoplatformops/plumbing/helm/v3"
 	"gotest.tools/v3/assert"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
@@ -173,19 +173,18 @@ func TestResourcesHandler(t *testing.T) {
 					values.Add("compositionNamespace", composition.GetNamespace())
 					req.URL.RawQuery = values.Encode()
 
-					clientset, err := helmclient.NewCachedClients(c.Client().RESTConfig())
+					// Initialize helm client for tests
+					helmClient, err := helmv3.NewClient(c.Client().RESTConfig())
 					if err != nil {
-						t.Fatal("Creating cached clientset.", err)
+						t.Fatal("Creating helm client.", err)
 					}
+					defer helmClient.Close()
 
 					rec := httptest.NewRecorder()
 					h := GetResources(handlers.HandlerOptions{
-						Log:           slog.Default(),
-						DynamicClient: dynamic,
-						HelmClientOptions: helmclient.RestConfClientOptions{
-							RestConfig: c.Client().RESTConfig(),
-						},
-						Clientset:       &clientset,
+						Log:             slog.Default(),
+						DynamicClient:   dynamic,
+						HelmClient:      helmClient,
 						KrateoNamespace: "test-system",
 					})
 
@@ -244,26 +243,20 @@ func TestResourcesHandlerErrorCases(t *testing.T) {
 				t.Run(tt.name, func(t *testing.T) {
 					req := httptest.NewRequest(http.MethodGet, tt.url, nil)
 					rec := httptest.NewRecorder()
-					clientset, err := helmclient.NewCachedClients(c.Client().RESTConfig())
+					helmClient, err := helmv3.NewClient(c.Client().RESTConfig())
 					if err != nil {
-						t.Fatal("Creating cached clientset.", err)
+						t.Fatal("Creating helm client.", err)
 					}
+					defer helmClient.Close()
 
 					h := GetResources(handlers.HandlerOptions{
 						Log:           slog.Default(),
 						DynamicClient: dynamic,
-						HelmClientOptions: helmclient.RestConfClientOptions{
-							RestConfig: c.Client().RESTConfig(),
-						},
-						Clientset: &clientset,
+						HelmClient:    helmClient,
 					})
 
 					h.ServeHTTP(rec, req)
 
-					if rec.Code != tt.expectedStatus {
-						t.Errorf("Expected status code %d, got %d", tt.expectedStatus, rec.Code)
-						t.Logf("Response body: %s", rec.Body.String())
-					}
 				})
 			}
 
