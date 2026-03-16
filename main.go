@@ -103,7 +103,6 @@ func main() {
 		Log:             log,
 		DynamicClient:   dyn,
 		KrateoNamespace: krateoNamespace,
-		HelmClient:      helmClient,
 		RestConfig:      cfg,
 	}
 

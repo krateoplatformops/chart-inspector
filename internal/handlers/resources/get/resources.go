@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	coreprovv1 "github.com/krateoplatformops/core-provider/apis/compositiondefinitions/v1alpha1"
 	"github.com/krateoplatformops/unstructured-runtime/pkg/meta"
-	"github.com/krateoplatformops/unstructured-runtime/pkg/pluralizer"
 
 	"github.com/krateoplatformops/chart-inspector/internal/getter"
 	"github.com/krateoplatformops/chart-inspector/internal/handlers"
@@ -127,7 +127,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		response.InternalError(w, err)
 		return
 	}
-	err = bValuesMap.InjectGlobalValues(composition, pluralizer.New(), h.KrateoNamespace)
+	err = bValuesMap.InjectGlobalValues(composition, h.Plurarizer, h.KrateoNamespace)
 	if err != nil {
 		log.Error("unable to inject global values",
 			slog.Any("err", err),
@@ -149,6 +149,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			log.Debug(fmt.Sprintf(format, v...))
 		}),
 		helmv3.WithNamespace(compositionNamespace),
+		helmv3.WithCRDInformer(wrappedCfg, 30*time.Minute),
 	)
 	if err != nil {
 		log.Error("unable to create traced helm client",
@@ -230,7 +231,6 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if resLi == nil {
 		resLi = []resources.Resource{}
 	}
-
 	if meta.IsVerbose(composition) {
 		b, err := json.Marshal(resLi)
 		if err != nil {
