@@ -24,6 +24,7 @@ import (
 	"os"
 
 	"github.com/krateoplatformops/plumbing/e2e"
+	helmv3 "github.com/krateoplatformops/plumbing/helm/v3"
 
 	xenv "github.com/krateoplatformops/plumbing/env"
 
@@ -127,6 +128,13 @@ func TestResourcesHandler(t *testing.T) {
 		Assess("Testing Resources Endpoint", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 			cfg := c.Client().RESTConfig()
 			copyCfg := rest.CopyConfig(cfg)
+			helmClient, err := helmv3.NewClient(copyCfg,
+				helmv3.WithCRDInformer(copyCfg, 30*time.Minute),
+			)
+			if err != nil {
+				t.Fatal("Failed to create helm client:", err)
+			}
+			defer helmClient.Close()
 
 			r, err := resources.New(copyCfg)
 			if err != nil {
@@ -184,6 +192,7 @@ func TestResourcesHandler(t *testing.T) {
 						KrateoNamespace: "test-system",
 						Plurarizer:      &mockPluralizer{},
 						RestConfig:      cfg,
+						HelmClient:      helmClient,
 					})
 
 					h.ServeHTTP(rec, req)
