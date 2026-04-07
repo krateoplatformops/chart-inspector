@@ -16,6 +16,7 @@ import (
 
 	_ "github.com/krateoplatformops/chart-inspector/docs"
 	"github.com/krateoplatformops/chart-inspector/internal/handlers"
+	"github.com/krateoplatformops/chart-inspector/internal/handlers/health"
 	getresources "github.com/krateoplatformops/chart-inspector/internal/handlers/resources/get"
 	"github.com/krateoplatformops/plumbing/env"
 	helmv3 "github.com/krateoplatformops/plumbing/helm/v3"
@@ -113,6 +114,8 @@ func main() {
 
 	healthy := int32(0)
 
+	mux.Handle("/healthz", health.Live())
+	mux.Handle("/readyz", health.Ready(&healthy))
 	mux.Handle("/resources", getresources.GetResources(opts))
 	mux.Handle("/swagger/", httpSwagger.WrapHandler)
 
