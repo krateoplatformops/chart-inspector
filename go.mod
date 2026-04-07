@@ -6,7 +6,7 @@ require (
 	github.com/gobuffalo/flect v1.0.3
 	github.com/krateoplatformops/composition-dynamic-controller v0.0.0-20260316133622-e0720c856536
 	github.com/krateoplatformops/core-provider v0.0.0-20250131152827-fd6b137b2d94
-	github.com/krateoplatformops/plumbing v1.6.0
+	github.com/krateoplatformops/plumbing v1.7.1
 	github.com/krateoplatformops/provider-runtime v0.9.1
 	github.com/krateoplatformops/unstructured-runtime v1.0.0
 	github.com/swaggo/http-swagger v1.3.4
@@ -149,5 +149,3 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
-
-replace github.com/krateoplatformops/plumbing => ../plumbing
