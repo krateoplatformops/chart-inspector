@@ -231,6 +231,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if resLi == nil {
 		resLi = []resources.Resource{}
 	}
+
 	if meta.IsVerbose(composition) {
 		b, err := json.Marshal(resLi)
 		if err != nil {

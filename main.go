@@ -16,10 +16,12 @@ import (
 
 	_ "github.com/krateoplatformops/chart-inspector/docs"
 	"github.com/krateoplatformops/chart-inspector/internal/handlers"
+	"github.com/krateoplatformops/chart-inspector/internal/handlers/health"
 	getresources "github.com/krateoplatformops/chart-inspector/internal/handlers/resources/get"
 	"github.com/krateoplatformops/plumbing/env"
 	helmv3 "github.com/krateoplatformops/plumbing/helm/v3"
 	prettylog "github.com/krateoplatformops/plumbing/slogs/pretty"
+	plurals "github.com/krateoplatformops/unstructured-runtime/pkg/pluralizer"
 	httpSwagger "github.com/swaggo/http-swagger"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
@@ -87,6 +89,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	pluralizer := plurals.New()
+
 	// Initialize Helm client with cache and CRD informer
 	helmClient, err := helmv3.NewClient(cfg,
 		helmv3.WithLogger(func(format string, v ...interface{}) {
@@ -104,10 +108,14 @@ func main() {
 		DynamicClient:   dyn,
 		KrateoNamespace: krateoNamespace,
 		RestConfig:      cfg,
+		Plurarizer:      pluralizer,
+		HelmClient:      helmClient,
 	}
 
 	healthy := int32(0)
 
+	mux.Handle("/healthz", health.Live())
+	mux.Handle("/readyz", health.Ready(&healthy))
 	mux.Handle("/resources", getresources.GetResources(opts))
 	mux.Handle("/swagger/", httpSwagger.WrapHandler)
 
