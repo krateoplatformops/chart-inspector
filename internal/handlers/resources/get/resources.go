@@ -1,10 +1,12 @@
 package resources
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	coreprovv1 "github.com/krateoplatformops/core-provider/apis/compositiondefinitions/v1alpha1"
 	"github.com/krateoplatformops/unstructured-runtime/pkg/meta"
@@ -17,6 +19,7 @@ import (
 	compositionMeta "github.com/krateoplatformops/composition-dynamic-controller/pkg/meta"
 	helmconfig "github.com/krateoplatformops/plumbing/helm"
 	helmutils "github.com/krateoplatformops/plumbing/helm/utils"
+	helmv3 "github.com/krateoplatformops/plumbing/helm/v3"
 	"github.com/krateoplatformops/plumbing/http/response"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -101,7 +104,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	composition, err := h.DynamicClient.
 		Resource(compositionGVR).
 		Namespace(compositionNamespace).
-		Get(r.Context(), compositionName, v1.GetOptions{})
+		Get(context.Background(), compositionName, v1.GetOptions{})
 	if err != nil {
 		log.Error("unable to get composition",
 			slog.String("compositionName", compositionName),
@@ -140,10 +143,27 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return tracer.WithRoundTripper(rt)
 	}
 
+	// Create a temporary helm client with tracer integration for this request
+	tracedHelmClient, err := helmv3.NewClient(wrappedCfg,
+		helmv3.WithLogger(func(format string, v ...interface{}) {
+			log.Debug(fmt.Sprintf(format, v...))
+		}),
+		helmv3.WithNamespace(compositionNamespace),
+		helmv3.WithCRDInformer(wrappedCfg, 30*time.Minute),
+	)
+	if err != nil {
+		log.Error("unable to create traced helm client",
+			slog.Any("err", err),
+		)
+		response.InternalError(w, err)
+		return
+	}
+	defer tracedHelmClient.Close()
+
 	compositionDefinitionU, err := h.DynamicClient.
 		Resource(compositionDefinitionGVR).
 		Namespace(compositionDefinitionNamespace).
-		Get(r.Context(), compositionDefinitionName, v1.GetOptions{})
+		Get(context.Background(), compositionDefinitionName, v1.GetOptions{})
 	if err != nil {
 		log.Error("unable to get composition definition",
 			slog.Any("err", err),
@@ -175,8 +195,6 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			IncludeCRDs:           true,
 			SkipCRDs:              false,
 		},
-		Namespace:       compositionNamespace,
-		RestConfig:      wrappedCfg,
 		CreateNamespace: true,
 	}
 
@@ -197,16 +215,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Install with DryRun to get templated manifest using traced helm client
-	if h.HelmClient == nil {
-		err := fmt.Errorf("helm client is not configured")
-		log.Error("unable to template chart",
-			slog.Any("err", err),
-		)
-		response.InternalError(w, err)
-		return
-	}
-
-	_, err = h.HelmClient.Install(r.Context(), compositionMeta.GetReleaseName(composition), compositionDefinition.Spec.Chart.Url, installCfg)
+	_, err = tracedHelmClient.Install(context.Background(), compositionMeta.GetReleaseName(composition), compositionDefinition.Spec.Chart.Url, installCfg)
 	if err != nil {
 		log.Error("unable to template chart",
 			slog.Any("err", err),
@@ -222,6 +231,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if resLi == nil {
 		resLi = []resources.Resource{}
 	}
+
 	if meta.IsVerbose(composition) {
 		b, err := json.Marshal(resLi)
 		if err != nil {
