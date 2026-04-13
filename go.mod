@@ -6,9 +6,9 @@ require (
 	github.com/gobuffalo/flect v1.0.3
 	github.com/krateoplatformops/composition-dynamic-controller v0.0.0-20260316133622-e0720c856536
 	github.com/krateoplatformops/core-provider v0.0.0-20250131152827-fd6b137b2d94
-	github.com/krateoplatformops/plumbing v1.7.1
+	github.com/krateoplatformops/plumbing v1.7.2
 	github.com/krateoplatformops/provider-runtime v0.9.1
-	github.com/krateoplatformops/unstructured-runtime v1.0.0
+	github.com/krateoplatformops/unstructured-runtime v1.0.1
 	github.com/swaggo/http-swagger v1.3.4
 	github.com/swaggo/swag/v2 v2.0.0-rc4
 	gotest.tools/v3 v3.4.0
@@ -131,14 +131,14 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	helm.sh/helm/v3 v3.20.0 // indirect
-	k8s.io/apiextensions-apiserver v0.35.0 // indirect
-	k8s.io/apiserver v0.35.0 // indirect
-	k8s.io/cli-runtime v0.35.0 // indirect
-	k8s.io/component-base v0.35.0 // indirect
+	helm.sh/helm/v3 v3.20.2 // indirect
+	k8s.io/apiextensions-apiserver v0.35.1 // indirect
+	k8s.io/apiserver v0.35.1 // indirect
+	k8s.io/cli-runtime v0.35.1 // indirect
+	k8s.io/component-base v0.35.1 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250910181357-589584f1c912 // indirect
-	k8s.io/kubectl v0.35.0 // indirect
+	k8s.io/kubectl v0.35.1 // indirect
 	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4 // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
 	sigs.k8s.io/controller-runtime v0.22.3 // indirect
