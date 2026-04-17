@@ -19,6 +19,7 @@ import (
 	"github.com/krateoplatformops/chart-inspector/internal/handlers/health"
 	getresources "github.com/krateoplatformops/chart-inspector/internal/handlers/resources/get"
 	"github.com/krateoplatformops/plumbing/env"
+	"github.com/krateoplatformops/plumbing/helm/getter/cache"
 	helmv3 "github.com/krateoplatformops/plumbing/helm/v3"
 	prettylog "github.com/krateoplatformops/plumbing/slogs/pretty"
 	plurals "github.com/krateoplatformops/unstructured-runtime/pkg/pluralizer"
@@ -91,11 +92,15 @@ func main() {
 
 	pluralizer := plurals.New()
 
-	// Initialize Helm client with cache and CRD informer
+	// Initialize Helm client with global cache and CRD informer
 	helmClient, err := helmv3.NewClient(cfg,
 		helmv3.WithLogger(func(format string, v ...interface{}) {
 			log.Debug(fmt.Sprintf(format, v...))
 		}),
+		helmv3.WithCache(
+			cache.WithCleanupInterval(5*time.Minute),
+			cache.WithTTL(1*time.Hour),
+		),
 		helmv3.WithCRDInformer(cfg, 30*time.Minute),
 	)
 	if err != nil {
