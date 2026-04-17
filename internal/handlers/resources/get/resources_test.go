@@ -98,7 +98,7 @@ func TestResourcesHandler(t *testing.T) {
 			compositionDefinition: "focus.yaml",
 			composition:           "focus.yaml",
 			expectedStatus:        http.StatusOK,
-			expectedBody:          `[{"group":"","version":"apiextensions.k8s.io","resource":"v1","name":"customresourcedefinitions","namespace":""},{"group":"finops.krateo.io","version":"v1alpha1","resource":"datapresentationazures","name":"focus-1-focus-data-presentation-azure","namespace":"krateo-system"},{"group":"finops.krateo.io","version":"v1alpha1","resource":"datapresentationazures","name":"focus-1-focus-data-presentation-azure","namespace":"krateo-system"}]`,
+			expectedBody:          `[{"group":"finops.krateo.io","version":"v1alpha1","resource":"datapresentationazures","name":"focus-1-focus-data-presentation-azure","namespace":"krateo-system"},{"group":"finops.krateo.io","version":"v1alpha1","resource":"datapresentationazures","name":"focus-1-focus-data-presentation-azure","namespace":"krateo-system"}]`,
 		},
 	}
 
