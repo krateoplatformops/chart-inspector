@@ -21,7 +21,7 @@ import (
 	"github.com/krateoplatformops/plumbing/env"
 	"github.com/krateoplatformops/plumbing/helm/getter/cache"
 	helmv3 "github.com/krateoplatformops/plumbing/helm/v3"
-	prettylog "github.com/krateoplatformops/plumbing/slogs/pretty"
+	"github.com/krateoplatformops/plumbing/logger"
 	plurals "github.com/krateoplatformops/unstructured-runtime/pkg/pluralizer"
 	httpSwagger "github.com/swaggo/http-swagger"
 	"k8s.io/client-go/dynamic"
@@ -48,26 +48,11 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	logLevel := slog.LevelInfo
-	if *debugOn {
-		logLevel = slog.LevelDebug
-	}
-
 	go func() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
 
-	lh := prettylog.New(&slog.HandlerOptions{
-		Level:     logLevel,
-		AddSource: false,
-	},
-		prettylog.WithDestinationWriter(os.Stderr),
-		prettylog.WithColor(),
-		prettylog.WithOutputEmptyAttrs(),
-	)
-	log := slog.New(lh)
-
-	log = log.With("service", serviceName)
+	log := logger.New(serviceName, *debugOn)
 
 	// Kubernetes configuration
 	var cfg *rest.Config
