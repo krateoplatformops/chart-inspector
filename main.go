@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
 	"log/slog"
 	"net/http"
 	_ "net/http/pprof"
@@ -48,11 +47,13 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	go func() {
-		log.Println(http.ListenAndServe("localhost:6060", nil))
-	}()
-
 	log := logger.New(serviceName, *debugOn)
+
+	go func() {
+		if err := http.ListenAndServe("localhost:6060", nil); err != nil {
+			log.Error("pprof server stopped", slog.Any("error", err))
+		}
+	}()
 
 	// Kubernetes configuration
 	var cfg *rest.Config
@@ -130,7 +131,7 @@ func main() {
 	go func() {
 		atomic.StoreInt32(&healthy, 1)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Error("could not listen on %s - %v", server.Addr, err)
+			log.Error("could not listen", slog.String("addr", server.Addr), slog.Any("error", err))
 			os.Exit(1)
 		}
 	}()
